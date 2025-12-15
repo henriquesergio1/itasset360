@@ -10,8 +10,9 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# IMPORTANT: Swap index.tsx (mock) with index.prod.tsx (real API) for production build
-RUN cp index.prod.tsx index.tsx
+# IMPORTANT: By default we use index.tsx which uses MockDataProvider.
+# Uncomment the line below ONLY if you have a running Backend API.
+# RUN cp index.prod.tsx index.tsx
 
 # Build for production
 RUN npm run build

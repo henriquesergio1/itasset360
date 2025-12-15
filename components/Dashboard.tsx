@@ -91,7 +91,7 @@ const Dashboard = () => {
         {/* Asset Status Distribution */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h2 className="text-lg font-bold text-gray-800 mb-4">Status dos Dispositivos</h2>
-          <div className="h-64 w-full">
+          <div style={{ width: '100%', height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -117,7 +117,7 @@ const Dashboard = () => {
         {/* Activity Chart */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h2 className="text-lg font-bold text-gray-800 mb-4">Movimentação Semanal</h2>
-          <div className="h-64 w-full">
+          <div style={{ width: '100%', height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={activityData}>
                 <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
