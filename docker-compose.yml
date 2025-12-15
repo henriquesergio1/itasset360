@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # Frontend Application (React + Nginx)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.txt
+    image: it-asset-360:latest
+    container_name: it-asset-360-app
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      # URL da API Backend (ajuste conforme necessário quando tiver o backend)
+      - REACT_APP_API_URL=http://localhost:5000/api
+    networks:
+      - it-asset-net
+    depends_on:
+      - db
+
+  # Database (SQL Server)
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: it-asset-360-db
+    restart: always
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=StrongP@ssw0rd! # Altere para uma senha segura em produção
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    networks:
+      - it-asset-net
+
+networks:
+  it-asset-net:
+    driver: bridge
+
+volumes:
+  mssql_data:
+    driver: local

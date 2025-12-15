@@ -1,0 +1,71 @@
+-- Script de Criação de Tabelas - IT Asset 360 (SQL Server)
+
+-- Tabela de Usuários
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Users')
+BEGIN
+    CREATE TABLE Users (
+        Id NVARCHAR(50) PRIMARY KEY,
+        FullName NVARCHAR(100) NOT NULL,
+        Cpf NVARCHAR(20) NOT NULL,
+        Rg NVARCHAR(20),
+        Pis NVARCHAR(20),
+        Address NVARCHAR(255),
+        Email NVARCHAR(100) NOT NULL,
+        Sector NVARCHAR(50), -- Vendas, Administrativo, TI, etc.
+        JobTitle NVARCHAR(100),
+        Active BIT DEFAULT 1
+    );
+END
+GO
+
+-- Tabela de Dispositivos
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Devices')
+BEGIN
+    CREATE TABLE Devices (
+        Id NVARCHAR(50) PRIMARY KEY,
+        Name NVARCHAR(100) NOT NULL,
+        Type NVARCHAR(50) NOT NULL, -- Notebook, Smartphone, etc.
+        Brand NVARCHAR(50),
+        Model NVARCHAR(50),
+        SerialNumber NVARCHAR(50),
+        AssetTag NVARCHAR(50), -- Patrimônio
+        PurchaseDate DATE,
+        Status NVARCHAR(50) NOT NULL, -- Disponível, Em Uso, Manutenção
+        CurrentUserId NVARCHAR(50) NULL,
+        CONSTRAINT FK_Devices_Users FOREIGN KEY (CurrentUserId) REFERENCES Users(Id)
+    );
+END
+GO
+
+-- Tabela de Chips/SIMs
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SimCards')
+BEGIN
+    CREATE TABLE SimCards (
+        Id NVARCHAR(50) PRIMARY KEY,
+        PhoneNumber NVARCHAR(50) NOT NULL,
+        Operator NVARCHAR(50),
+        Iccid NVARCHAR(50),
+        PlanDetails NVARCHAR(100),
+        Status NVARCHAR(50) NOT NULL,
+        CurrentUserId NVARCHAR(50) NULL,
+        CONSTRAINT FK_SimCards_Users FOREIGN KEY (CurrentUserId) REFERENCES Users(Id)
+    );
+END
+GO
+
+-- Tabela de Auditoria (Logs)
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AuditLogs')
+BEGIN
+    CREATE TABLE AuditLogs (
+        Id NVARCHAR(50) PRIMARY KEY,
+        AssetId NVARCHAR(50) NOT NULL,
+        AssetType NVARCHAR(20) NOT NULL, -- 'Device' ou 'Sim'
+        UserId NVARCHAR(50) NULL, -- Usuário envolvido na ação
+        Action NVARCHAR(50) NOT NULL, -- Entrega, Devolução, Manutenção
+        Timestamp DATETIME2 DEFAULT GETDATE(),
+        Notes NVARCHAR(MAX),
+        AdminUser NVARCHAR(100), -- Quem realizou a operação no sistema
+        CONSTRAINT FK_AuditLogs_Users FOREIGN KEY (UserId) REFERENCES Users(Id)
+    );
+END
+GO
