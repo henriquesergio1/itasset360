@@ -30,8 +30,8 @@ services:
     ports:
       - "8083:80"
     environment:
-      # O navegador acessa via porta 5001 agora
-      - REACT_APP_API_URL=http://localhost:5001/api
+      # URL da API removida para uso dinâmico via JS (veja ProdDataProvider.tsx)
+      - NODE_ENV=production
     depends_on:
       - api
     networks:

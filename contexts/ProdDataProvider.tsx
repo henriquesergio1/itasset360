@@ -2,8 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { DataContext, DataContextType } from './DataContext';
 import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term } from '../types';
 
-// API Configuration - Padrão alterado para 5001
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+// API Configuration Dinâmica
+// Detecta se está acessando via localhost ou IP e ajusta a chamada da API para a porta 5001 do mesmo host
+const getApiUrl = () => {
+    // Se foi injetado via variável de ambiente (Build time), usa ela.
+    if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
+    
+    // Caso contrário, constrói baseado na URL atual do navegador
+    // Ex: Se o site está em 192.168.0.10:8083, a API será chamada em 192.168.0.10:5001
+    return `http://${window.location.hostname}:5001/api`;
+};
+
+const API_URL = getApiUrl();
 
 export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [devices, setDevices] = useState<Device[]>([]);
