@@ -5,30 +5,36 @@ export enum DeviceStatus {
   RETIRED = 'Descartado'
 }
 
-// Configurações Dinâmicas (Substitui o Enum estático para permitir cadastro)
+// Configurações Dinâmicas
 export interface AssetType {
   id: string;
-  name: string; // Ex: Smartphone, Notebook
+  name: string; 
 }
 
 export interface DeviceBrand {
   id: string;
-  name: string; // Ex: Dell, Apple
+  name: string; 
 }
 
 export interface DeviceModel {
   id: string;
-  name: string; // Ex: iPhone 13, Latitude 5420
+  name: string; 
   brandId: string;
   typeId: string;
-  imageUrl?: string; // Foto do modelo
+  imageUrl?: string; 
 }
 
-// Manutenção
-export enum MaintenanceType {
-  CORRECTIVE = 'Corretiva',
-  PREVENTIVE = 'Preventiva',
-  AUDIT = 'Auditoria'
+// Novos Tipos para Acessórios
+export interface AccessoryType {
+    id: string;
+    name: string; // Ex: Carregador, Capa, Mochila, Mouse
+}
+
+export interface DeviceAccessory {
+    id: string;
+    deviceId: string;
+    accessoryTypeId: string; // Relacionado a AccessoryType
+    name: string; // Nome cacheado ou específico (ex: Carregador 65W)
 }
 
 export interface MaintenanceRecord {
@@ -38,35 +44,39 @@ export interface MaintenanceRecord {
   date: string;
   description: string;
   cost: number;
-  provider: string; // Prestador de serviço
-  invoiceUrl?: string; // Anexo da nota de serviço
+  provider: string; 
+  invoiceUrl?: string; 
+}
+
+export enum MaintenanceType {
+  CORRECTIVE = 'Corretiva',
+  PREVENTIVE = 'Preventiva',
+  AUDIT = 'Auditoria'
 }
 
 export interface Device {
   id: string;
-  // Relacionamento com Modelo (que contém Marca e Tipo)
   modelId: string; 
-  
   serialNumber: string;
-  assetTag: string; // Patrimônio
+  assetTag: string; 
   status: DeviceStatus;
   currentUserId?: string | null;
   
-  // Novos Campos Solicitados
-  imei?: string;         // Para Celulares/Tablets
-  pulsusId?: string;     // ID do MDM Pulsus
-  sectorId?: string;     // Relacionamento com Setor (Vendas, TI, etc)
-  costCenter?: string;   // Código do Setor / Centro de Custo
+  imei?: string;         
+  pulsusId?: string;     
+  sectorId?: string;     
+  costCenter?: string;   
 
-  // Vínculo com Chip (Opcional)
   linkedSimId?: string | null;
+  
+  // Array de acessórios vinculados a este dispositivo
+  accessories?: DeviceAccessory[]; 
 
-  // Dados de Compra / Financeiro
   purchaseDate: string;
   purchaseCost: number;
   invoiceNumber?: string;
   supplier?: string;
-  purchaseInvoiceUrl?: string; // Anexo da nota de compra
+  purchaseInvoiceUrl?: string; 
 }
 
 export interface SimCard {
@@ -79,21 +89,22 @@ export interface SimCard {
   planDetails?: string;
 }
 
-// Setores Dinâmicos
 export interface UserSector {
   id: string;
   name: string;
 }
 
-// Termo de Responsabilidade
 export interface Term {
   id: string;
   userId: string;
   type: 'ENTREGA' | 'DEVOLUCAO';
-  assetDetails: string; // Ex: "iPhone 13 (Tag: 001)"
+  assetDetails: string; 
   date: string;
-  fileUrl: string; // URL do PDF/Imagem assinado
+  fileUrl: string; 
 }
+
+// Checklist Dinâmico (Chave = Nome do Acessório, Valor = Boolean)
+export type ReturnChecklist = Record<string, boolean>;
 
 export interface User {
   id: string;
@@ -103,10 +114,14 @@ export interface User {
   pis?: string;
   address: string;
   email: string;
-  sectorId: string; // ID do setor
+  sectorId: string; 
   jobTitle: string;
   active: boolean;
-  terms?: Term[]; // Lista de termos assinados
+  terms?: Term[];
+  
+  // Nova flag para indicar pendências manuais (ex: devolução incompleta)
+  hasPendingIssues?: boolean; 
+  pendingIssuesNote?: string;
 }
 
 export enum SystemRole {
@@ -125,9 +140,10 @@ export interface SystemUser {
 
 export interface SystemSettings {
   appName: string;
-  cnpj?: string; // Novo campo
+  cnpj?: string; 
   logoUrl: string;
-  termTemplate?: string; // HTML do termo de responsabilidade
+  termTemplate?: string; 
+  returnTermTemplate?: string; 
 }
 
 export enum ActionType {
@@ -146,7 +162,7 @@ export enum ActionType {
 export interface AuditLog {
   id: string;
   assetId: string;
-  assetType: 'Device' | 'Sim' | 'User' | 'System' | 'Model' | 'Brand' | 'Type' | 'Sector';
+  assetType: 'Device' | 'Sim' | 'User' | 'System' | 'Model' | 'Brand' | 'Type' | 'Sector' | 'Accessory';
   targetName?: string;
   action: ActionType;
   timestamp: string;

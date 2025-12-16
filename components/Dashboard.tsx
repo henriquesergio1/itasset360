@@ -1,8 +1,9 @@
 import React from 'react';
 import { useData } from '../contexts/DataContext';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { Smartphone, Users, Wifi, AlertTriangle } from 'lucide-react';
+import { Smartphone, Users, Wifi, AlertTriangle, FileWarning, ArrowRight } from 'lucide-react';
 import { DeviceStatus } from '../types';
+import { Link } from 'react-router-dom';
 
 const StatCard = ({ title, value, icon: Icon, color, subtitle }: any) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-start justify-between hover:shadow-md transition-shadow">
@@ -44,6 +45,15 @@ const Dashboard = () => {
     Devolucoes: Math.floor(Math.random() * 3)
   }));
 
+  // --- MISSING TERMS ALERT LOGIC ---
+  // Flatmap all users' terms and filter those without fileUrl
+  const pendingTerms = users.flatMap(u => 
+      (u.terms || []).filter(t => !t.fileUrl).map(t => ({
+          term: t,
+          user: u
+      }))
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -84,6 +94,63 @@ const Dashboard = () => {
           subtitle="Prazo médio: 5 dias"
         />
       </div>
+
+      {/* ALERT SECTION FOR PENDING TERMS */}
+      {pendingTerms.length > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 shadow-sm animate-fade-in">
+              <div className="flex items-start gap-4">
+                  <div className="p-3 bg-orange-100 text-orange-600 rounded-lg">
+                      <FileWarning size={24} />
+                  </div>
+                  <div className="flex-1">
+                      <h3 className="text-lg font-bold text-orange-900 mb-1">
+                          {pendingTerms.length} Termos Pendentes de Assinatura
+                      </h3>
+                      <p className="text-sm text-orange-800 mb-4">
+                          As seguintes movimentações foram realizadas mas o termo assinado ainda não foi anexado ao sistema.
+                      </p>
+                      
+                      <div className="bg-white rounded-lg border border-orange-100 overflow-hidden">
+                          <table className="w-full text-sm text-left">
+                              <thead className="bg-orange-50 text-orange-800 text-xs uppercase">
+                                  <tr>
+                                      <th className="px-4 py-2">Data</th>
+                                      <th className="px-4 py-2">Colaborador</th>
+                                      <th className="px-4 py-2">Tipo</th>
+                                      <th className="px-4 py-2">Ativo</th>
+                                      <th className="px-4 py-2 text-right">Ação</th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                                  {pendingTerms.slice(0, 5).map(({term, user}) => (
+                                      <tr key={term.id} className="border-b last:border-0 hover:bg-orange-50/50">
+                                          <td className="px-4 py-2 text-gray-600">{new Date(term.date).toLocaleDateString()}</td>
+                                          <td className="px-4 py-2 font-medium text-gray-800">{user.fullName}</td>
+                                          <td className="px-4 py-2">
+                                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${term.type === 'ENTREGA' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                                                  {term.type}
+                                              </span>
+                                          </td>
+                                          <td className="px-4 py-2 text-gray-600 text-xs">{term.assetDetails}</td>
+                                          <td className="px-4 py-2 text-right">
+                                              <Link to="/users" className="text-blue-600 hover:underline text-xs flex items-center justify-end gap-1">
+                                                  Resolver <ArrowRight size={12}/>
+                                              </Link>
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                          {pendingTerms.length > 5 && (
+                              <div className="px-4 py-2 text-xs text-center text-gray-500 bg-gray-50">
+                                  + {pendingTerms.length - 5} outros termos pendentes.
+                              </div>
+                          )}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { DeviceStatus, Device, SimCard } from '../types';
-import { ArrowRightLeft, CheckCircle, Smartphone, User as UserIcon, FileText, Printer, Search, ChevronDown, X } from 'lucide-react';
+import { DeviceStatus, Device, SimCard, ReturnChecklist } from '../types';
+import { ArrowRightLeft, CheckCircle, Smartphone, User as UserIcon, FileText, Printer, Search, ChevronDown, X, CheckSquare } from 'lucide-react';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
 type OperationType = 'CHECKOUT' | 'CHECKIN';
@@ -136,12 +136,24 @@ const Operations = () => {
   const [termFile, setTermFile] = useState<File | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   
+  // Checkin Checklist State
+  const [checklist, setChecklist] = useState<ReturnChecklist>({
+      device: true,
+      charger: true,
+      cable: true,
+      case: true,
+      sim: false,
+      manual: false
+  });
+
   // State for last operation to enable printing
   const [lastOperation, setLastOperation] = useState<{
       userId: string;
       assetId: string;
       assetType: AssetType;
       action: OperationType;
+      checklistSnapshot?: ReturnChecklist; // Store checklist for printing
+      notes: string; // Add notes here
   } | null>(null);
 
   // Filtering for Select Options
@@ -150,6 +162,21 @@ const Operations = () => {
   
   const availableSims = sims.filter(s => s.status === DeviceStatus.AVAILABLE);
   const inUseSims = sims.filter(s => s.status === DeviceStatus.IN_USE);
+
+  // Reset Checklist Logic when asset changes
+  useEffect(() => {
+      if (activeTab === 'CHECKIN' && assetType === 'Device' && selectedAssetId) {
+          const dev = devices.find(d => d.id === selectedAssetId);
+          setChecklist({
+              device: true,
+              charger: true,
+              cable: true,
+              case: true,
+              sim: !!dev?.linkedSimId, // Auto-check if linked SIM exists
+              manual: false
+          });
+      }
+  }, [selectedAssetId, activeTab, assetType, devices]);
 
   // --- Prepare Options for Dropdowns ---
   
@@ -214,7 +241,9 @@ const Operations = () => {
         userId: currentUserId,
         assetId: selectedAssetId,
         assetType: assetType,
-        action: activeTab
+        action: activeTab,
+        checklistSnapshot: activeTab === 'CHECKIN' && assetType === 'Device' ? { ...checklist } : undefined,
+        notes: notes
     });
 
     // Reset Form
@@ -264,7 +293,9 @@ const Operations = () => {
           type,
           actionType: lastOperation.action === 'CHECKOUT' ? 'ENTREGA' : 'DEVOLUCAO',
           linkedSim,
-          sectorName
+          sectorName,
+          checklist: lastOperation.checklistSnapshot,
+          notes: lastOperation.notes
       });
   };
 
@@ -285,7 +316,7 @@ const Operations = () => {
         </button>
         <button 
           onClick={() => { setActiveTab('CHECKIN'); setSelectedAssetId(''); setSelectedUserId(''); setLastOperation(null); }}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === 'CHECKIN' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === 'CHECKIN' ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}
         >
           Devolução (Retornar)
         </button>
@@ -366,10 +397,45 @@ const Operations = () => {
               )}
 
               {activeTab === 'CHECKIN' && selectedAssetId && (
-                 <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-sm border border-blue-100 flex items-center gap-2">
-                   <UserIcon size={16}/>
-                   <span>Devolvendo de: <strong>{users.find(u => u.id === (assetType === 'Device' ? devices.find(d => d.id === selectedAssetId)?.currentUserId : sims.find(s => s.id === selectedAssetId)?.currentUserId))?.fullName}</strong></span>
-                 </div>
+                 <>
+                     <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-sm border border-blue-100 flex items-center gap-2">
+                       <UserIcon size={16}/>
+                       <span>Devolvendo de: <strong>{users.find(u => u.id === (assetType === 'Device' ? devices.find(d => d.id === selectedAssetId)?.currentUserId : sims.find(s => s.id === selectedAssetId)?.currentUserId))?.fullName}</strong></span>
+                     </div>
+                     
+                     {/* CHECKLIST for Device Returns */}
+                     {assetType === 'Device' && (
+                          <div className="space-y-3 bg-orange-50 p-4 rounded-lg border border-orange-100">
+                              <label className="block text-sm font-bold text-orange-800 flex items-center gap-2">
+                                  <CheckSquare size={16}/> Checklist de Devolução
+                              </label>
+                              <div className="grid grid-cols-2 gap-3">
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                      <input type="checkbox" checked={checklist.device} onChange={e => setChecklist({...checklist, device: e.target.checked})} className="rounded text-orange-600 focus:ring-orange-500"/>
+                                      <span className="text-sm">Aparelho</span>
+                                  </label>
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                      <input type="checkbox" checked={checklist.charger} onChange={e => setChecklist({...checklist, charger: e.target.checked})} className="rounded text-orange-600 focus:ring-orange-500"/>
+                                      <span className="text-sm">Carregador</span>
+                                  </label>
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                      <input type="checkbox" checked={checklist.cable} onChange={e => setChecklist({...checklist, cable: e.target.checked})} className="rounded text-orange-600 focus:ring-orange-500"/>
+                                      <span className="text-sm">Cabo</span>
+                                  </label>
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                      <input type="checkbox" checked={checklist.case} onChange={e => setChecklist({...checklist, case: e.target.checked})} className="rounded text-orange-600 focus:ring-orange-500"/>
+                                      <span className="text-sm">Capa</span>
+                                  </label>
+                                  {devices.find(d => d.id === selectedAssetId)?.linkedSimId && (
+                                     <label className="flex items-center gap-2 cursor-pointer col-span-2">
+                                         <input type="checkbox" checked={checklist.sim} onChange={e => setChecklist({...checklist, sim: e.target.checked})} className="rounded text-orange-600 focus:ring-orange-500"/>
+                                         <span className="text-sm font-bold text-blue-600">Chip Vinculado</span>
+                                     </label>
+                                  )}
+                              </div>
+                          </div>
+                     )}
+                 </>
               )}
 
               {/* Terms of Responsibility Upload */}
@@ -412,7 +478,7 @@ const Operations = () => {
                   </div>
                   {lastOperation && (
                       <button onClick={handlePrintLastTerm} className="text-sm text-blue-700 hover:underline flex items-center gap-1 mt-1 font-medium pl-7">
-                          <Printer size={14}/> Imprimir Termo Automaticamente
+                          <Printer size={14}/> Imprimir Termo de {lastOperation.action === 'CHECKOUT' ? 'Entrega' : 'Devolução'}
                       </button>
                   )}
                 </div>

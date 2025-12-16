@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Device, DeviceStatus, MaintenanceRecord, MaintenanceType, ActionType } from '../types';
-import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink } from 'lucide-react';
+import { Device, DeviceStatus, MaintenanceRecord, MaintenanceType, ActionType, ReturnChecklist, DeviceAccessory } from '../types';
+import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X } from 'lucide-react';
 import ModelSettings from './ModelSettings';
+import { generateAndPrintTerm } from '../utils/termGenerator';
 
 const DeviceManager = () => {
   const { 
     devices, addDevice, updateDevice, deleteDevice, 
-    users, models, brands, assetTypes, sims, sectors,
+    users, models, brands, assetTypes, sims, sectors, accessoryTypes,
     maintenances, addMaintenance, deleteMaintenance,
-    getHistory // Função para pegar logs
+    getHistory, settings,
+    assignAsset, returnAsset // Import operations
   } = useData();
   const { user: currentUser } = useAuth();
   
@@ -18,21 +20,35 @@ const DeviceManager = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isModelSettingsOpen, setIsModelSettingsOpen] = useState(false);
+  const [isQuickOpOpen, setIsQuickOpOpen] = useState(false); // Quick Operation Modal
   
   // Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'GENERAL' | 'FINANCIAL' | 'MAINTENANCE' | 'HISTORY'>('GENERAL');
+  const [activeTab, setActiveTab] = useState<'GENERAL' | 'ACCESSORIES' | 'FINANCIAL' | 'MAINTENANCE' | 'HISTORY'>('GENERAL');
   
   // Form State
   const [formData, setFormData] = useState<Partial<Device>>({
-    status: DeviceStatus.AVAILABLE
+    status: DeviceStatus.AVAILABLE,
+    accessories: []
   });
   
-  // New State for ID Type (Tag vs IMEI)
+  // Quick Operation State
+  const [quickOpDevice, setQuickOpDevice] = useState<Device | null>(null);
+  const [quickOpType, setQuickOpType] = useState<'CHECKOUT' | 'CHECKIN'>('CHECKOUT');
+  const [quickOpUser, setQuickOpUser] = useState('');
+  const [quickOpNotes, setQuickOpNotes] = useState('');
+  // Checkin Checklist State
+  const [checklist, setChecklist] = useState<ReturnChecklist>({});
+  const [lastOpSuccess, setLastOpSuccess] = useState(false);
+
+  // ID Type State
   const [idType, setIdType] = useState<'TAG' | 'IMEI'>('TAG');
 
   // Maintenance Form State
   const [newMaint, setNewMaint] = useState<Partial<MaintenanceRecord>>({ type: MaintenanceType.CORRECTIVE, cost: 0 });
+
+  // Accessory Mgmt
+  const [selectedAccType, setSelectedAccType] = useState('');
 
   const adminName = currentUser?.name || 'Unknown User';
 
@@ -42,8 +58,7 @@ const DeviceManager = () => {
     setActiveTab('GENERAL');
     if (device) {
       setEditingId(device.id);
-      setFormData(device);
-      // Se tiver IMEI preenchido, assume que é do tipo IMEI
+      setFormData({ ...device, accessories: device.accessories || [] });
       if (device.imei) {
           setIdType('IMEI');
       } else {
@@ -54,7 +69,8 @@ const DeviceManager = () => {
       setFormData({ 
         status: DeviceStatus.AVAILABLE, 
         purchaseDate: new Date().toISOString().split('T')[0],
-        purchaseCost: 0
+        purchaseCost: 0,
+        accessories: []
       });
       setIdType('TAG');
     }
@@ -64,10 +80,8 @@ const DeviceManager = () => {
   const handleDeviceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validação de IMEI
     if (idType === 'IMEI') {
         const currentVal = formData.assetTag || '';
-        // Remove não numéricos para testar
         const numericVal = currentVal.replace(/\D/g, '');
         
         if (numericVal.length !== 15) {
@@ -75,11 +89,9 @@ const DeviceManager = () => {
             return;
         }
 
-        // Salva o valor validado tanto no imei quanto no assetTag (para visualização padrão)
         formData.imei = numericVal;
         formData.assetTag = numericVal; 
     } else {
-        // Se for TAG, limpa o IMEI para não gerar confusão
         formData.imei = undefined;
     }
 
@@ -97,15 +109,38 @@ const DeviceManager = () => {
 
   const handleIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       let val = e.target.value;
-      
       if (idType === 'IMEI') {
-          // Permite apenas números
           val = val.replace(/\D/g, '');
-          // Limita a 15 caracteres
           if (val.length > 15) return;
       }
-      
       setFormData({ ...formData, assetTag: val });
+  };
+
+  // --- Accessory Management in Form ---
+  const handleAddAccessory = () => {
+      if (!selectedAccType) return;
+      const accType = accessoryTypes.find(t => t.id === selectedAccType);
+      if (!accType) return;
+
+      const newAcc: DeviceAccessory = {
+          id: Math.random().toString(36).substr(2,9),
+          deviceId: formData.id || '',
+          accessoryTypeId: accType.id,
+          name: accType.name 
+      };
+
+      setFormData(prev => ({
+          ...prev,
+          accessories: [...(prev.accessories || []), newAcc]
+      }));
+      setSelectedAccType('');
+  };
+
+  const handleRemoveAccessory = (accId: string) => {
+      setFormData(prev => ({
+          ...prev,
+          accessories: prev.accessories?.filter(a => a.id !== accId)
+      }));
   };
 
   const handleAddMaintenance = () => {
@@ -114,13 +149,84 @@ const DeviceManager = () => {
         id: Math.random().toString(36).substr(2, 9),
         deviceId: editingId!,
         date: new Date().toISOString(),
-        description: newMaint.description,
+        description: newMaint.description!,
         cost: Number(newMaint.cost),
         type: newMaint.type || MaintenanceType.CORRECTIVE,
         provider: newMaint.provider || 'Interno'
     };
     addMaintenance(record, adminName);
     setNewMaint({ type: MaintenanceType.CORRECTIVE, cost: 0, description: '', provider: '' });
+  };
+
+  // --- Quick Operation Handlers ---
+  const handleOpenQuickOp = (device: Device, type: 'CHECKOUT' | 'CHECKIN') => {
+      setQuickOpDevice(device);
+      setQuickOpType(type);
+      setQuickOpUser('');
+      setQuickOpNotes('');
+      setLastOpSuccess(false);
+      
+      // Init Checklist for Checkin (Dynamic based on accessories)
+      if (type === 'CHECKIN') {
+          const initialChecklist: ReturnChecklist = {
+              'Equipamento Principal': true
+          };
+          if (device.accessories) {
+              device.accessories.forEach(acc => {
+                  initialChecklist[acc.name] = true;
+              });
+          }
+          if (device.linkedSimId) {
+              initialChecklist['Chip SIM Vinculado'] = true;
+          }
+          setChecklist(initialChecklist);
+      }
+      
+      setIsQuickOpOpen(true);
+  };
+
+  const submitQuickOp = () => {
+      if (!quickOpDevice) return;
+
+      if (quickOpType === 'CHECKOUT') {
+          if (!quickOpUser) {
+              alert('Selecione um usuário.');
+              return;
+          }
+          assignAsset('Device', quickOpDevice.id, quickOpUser, quickOpNotes, adminName);
+      } else {
+          // Checkin - Pass checklist to identify missing items
+          returnAsset('Device', quickOpDevice.id, quickOpNotes, adminName, undefined, checklist);
+      }
+      
+      setLastOpSuccess(true);
+  };
+
+  const handlePrintTerm = () => {
+      if (!quickOpDevice) return;
+
+      const user = users.find(u => u.id === (quickOpType === 'CHECKOUT' ? quickOpUser : quickOpDevice.currentUserId));
+      const model = models.find(m => m.id === quickOpDevice.modelId);
+      const brand = brands.find(b => b.id === model?.brandId);
+      const type = assetTypes.find(t => t.id === model?.typeId);
+      const linkedSim = sims.find(s => s.id === quickOpDevice.linkedSimId);
+      const sectorName = sectors.find(s => s.id === user?.sectorId)?.name;
+
+      if (user) {
+          generateAndPrintTerm({
+              user,
+              asset: quickOpDevice,
+              settings,
+              model,
+              brand,
+              type,
+              actionType: quickOpType === 'CHECKOUT' ? 'ENTREGA' : 'DEVOLUCAO',
+              linkedSim,
+              sectorName,
+              checklist: quickOpType === 'CHECKIN' ? checklist : undefined,
+              notes: quickOpNotes
+          });
+      }
   };
 
   // --- Helpers ---
@@ -138,14 +244,9 @@ const DeviceManager = () => {
     return searchString.includes(searchTerm.toLowerCase());
   });
 
-  // Sim Linking Options (Available Sims + Currently Linked Sim)
   const availableSims = sims.filter(s => s.status === DeviceStatus.AVAILABLE || s.id === formData.linkedSimId);
-
-  // Maintenance Calculations
   const deviceMaintenances = maintenances.filter(m => m.deviceId === editingId);
   const totalMaintenanceCost = deviceMaintenances.reduce((acc, curr) => acc + curr.cost, 0);
-
-  // History Logs
   const deviceHistory = editingId ? getHistory(editingId) : [];
 
   return (
@@ -255,6 +356,28 @@ const DeviceManager = () => {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {/* Shortcut Buttons */}
+                        {device.status === DeviceStatus.AVAILABLE && (
+                            <button 
+                                onClick={() => handleOpenQuickOp(device, 'CHECKOUT')}
+                                className="text-green-600 hover:bg-green-50 p-1.5 rounded transition-colors"
+                                title="Realizar Entrega"
+                            >
+                                <ArrowUpRight size={18} />
+                            </button>
+                        )}
+                        {device.status === DeviceStatus.IN_USE && (
+                            <button 
+                                onClick={() => handleOpenQuickOp(device, 'CHECKIN')}
+                                className="text-orange-600 hover:bg-orange-50 p-1.5 rounded transition-colors"
+                                title="Realizar Devolução"
+                            >
+                                <ArrowDownLeft size={18} />
+                            </button>
+                        )}
+                        
+                        <div className="w-px h-4 bg-gray-300 mx-1"></div>
+
                         {device.pulsusId && (
                             <a 
                                 href={`https://app.pulsus.mobi/devices/${device.pulsusId}`} 
@@ -281,7 +404,126 @@ const DeviceManager = () => {
         </div>
       </div>
 
-      {/* === MAIN DEVICE MODAL === */}
+      {/* === QUICK OPERATION MODAL === */}
+      {isQuickOpOpen && quickOpDevice && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in">
+                  <div className={`px-6 py-4 flex justify-between items-center ${quickOpType === 'CHECKOUT' ? 'bg-blue-600' : 'bg-orange-600'}`}>
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                          {quickOpType === 'CHECKOUT' ? <ArrowUpRight size={20}/> : <ArrowDownLeft size={20}/>}
+                          {quickOpType === 'CHECKOUT' ? 'Entrega de Equipamento' : 'Devolução de Equipamento'}
+                      </h3>
+                      <button onClick={() => setIsQuickOpOpen(false)} className="text-white/80 hover:text-white"><X size={20}/></button>
+                  </div>
+
+                  {!lastOpSuccess ? (
+                      <div className="p-6 space-y-4">
+                          <div className="bg-gray-50 p-3 rounded-lg border text-sm">
+                              <p className="font-bold text-gray-800">{models.find(m => m.id === quickOpDevice.modelId)?.name}</p>
+                              <p className="text-gray-500">Tag: {quickOpDevice.assetTag} | SN: {quickOpDevice.serialNumber}</p>
+                              {/* Show Accessories */}
+                              {quickOpDevice.accessories && quickOpDevice.accessories.length > 0 && (
+                                  <div className="mt-2 pt-2 border-t text-xs text-gray-600">
+                                      <strong>Acessórios:</strong> {quickOpDevice.accessories.map(a => a.name).join(', ')}
+                                  </div>
+                              )}
+                          </div>
+
+                          {/* CHECKOUT FORM */}
+                          {quickOpType === 'CHECKOUT' && (
+                              <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Selecione o Usuário</label>
+                                  <select 
+                                      className="w-full border rounded-lg p-2.5 bg-white"
+                                      value={quickOpUser}
+                                      onChange={(e) => setQuickOpUser(e.target.value)}
+                                  >
+                                      <option value="">Selecione...</option>
+                                      {users.filter(u => u.active).map(u => (
+                                          <option key={u.id} value={u.id}>{u.fullName} - {sectors.find(s => s.id === u.sectorId)?.name}</option>
+                                      ))}
+                                  </select>
+                              </div>
+                          )}
+
+                          {/* CHECKIN CHECKLIST */}
+                          {quickOpType === 'CHECKIN' && (
+                              <div className="space-y-3">
+                                  <label className="block text-sm font-bold text-gray-800 flex items-center gap-2">
+                                      <CheckSquare size={16}/> Checklist de Devolução
+                                  </label>
+                                  <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-1">
+                                      {/* Dynamic Checklist Items */}
+                                      {Object.keys(checklist).map(itemKey => (
+                                          <label key={itemKey} className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50 cursor-pointer">
+                                              <input 
+                                                type="checkbox" 
+                                                checked={checklist[itemKey]} 
+                                                onChange={e => setChecklist(prev => ({...prev, [itemKey]: e.target.checked}))} 
+                                                className="rounded text-blue-600"
+                                              />
+                                              <span className="text-sm truncate" title={itemKey}>{itemKey}</span>
+                                          </label>
+                                      ))}
+                                  </div>
+                                  {!checklist['Equipamento Principal'] && (
+                                      <p className="text-xs text-red-600 font-bold mt-2">Atenção: O aparelho principal não foi marcado. O termo indicará pendência.</p>
+                                  )}
+                              </div>
+                          )}
+
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                              <textarea 
+                                  className="w-full border rounded-lg p-2" 
+                                  rows={2} 
+                                  placeholder="Detalhes adicionais..."
+                                  value={quickOpNotes}
+                                  onChange={e => setQuickOpNotes(e.target.value)}
+                              />
+                          </div>
+
+                          <div className="pt-2">
+                              <button 
+                                  onClick={submitQuickOp} 
+                                  className={`w-full py-3 rounded-lg text-white font-bold shadow-md transition-colors ${quickOpType === 'CHECKOUT' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'}`}
+                              >
+                                  Confirmar {quickOpType === 'CHECKOUT' ? 'Entrega' : 'Devolução'}
+                              </button>
+                          </div>
+                      </div>
+                  ) : (
+                      // SUCCESS STATE WITH PRINT BUTTON
+                      <div className="p-8 flex flex-col items-center text-center space-y-6">
+                          <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-2">
+                              <CheckCircle size={40} />
+                          </div>
+                          <div>
+                              <h3 className="text-xl font-bold text-gray-800">Operação Realizada!</h3>
+                              <p className="text-gray-500 mt-1">O status do dispositivo foi atualizado.</p>
+                          </div>
+                          
+                          <button 
+                              onClick={handlePrintTerm}
+                              className="w-full flex items-center justify-center gap-3 bg-slate-800 text-white py-4 rounded-xl hover:bg-slate-700 transition-all shadow-lg group"
+                          >
+                              <Printer size={24} className="group-hover:scale-110 transition-transform"/>
+                              <div className="text-left">
+                                  <span className="block text-xs text-gray-400 uppercase font-bold">Documentação</span>
+                                  <span className="block font-bold text-lg">Imprimir Termo de {quickOpType === 'CHECKOUT' ? 'Entrega' : 'Devolução'}</span>
+                              </div>
+                          </button>
+
+                          <button onClick={() => setIsQuickOpOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm underline">
+                              Fechar Janela
+                          </button>
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
+
+      {/* === MAIN DEVICE MODAL (EXISTING) === */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -293,12 +535,13 @@ const DeviceManager = () => {
 
             {/* Tabs Header */}
             <div className="flex border-b shrink-0 overflow-x-auto">
-                <button onClick={() => setActiveTab('GENERAL')} className={`flex-1 min-w-[120px] py-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'GENERAL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Dados Gerais</button>
-                <button onClick={() => setActiveTab('FINANCIAL')} className={`flex-1 min-w-[120px] py-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'FINANCIAL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Financeiro & Compra</button>
+                <button onClick={() => setActiveTab('GENERAL')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'GENERAL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Geral</button>
+                <button onClick={() => setActiveTab('ACCESSORIES')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'ACCESSORIES' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Acessórios ({formData.accessories?.length || 0})</button>
+                <button onClick={() => setActiveTab('FINANCIAL')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'FINANCIAL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Financeiro</button>
                 {editingId && (
                     <>
-                        <button onClick={() => setActiveTab('MAINTENANCE')} className={`flex-1 min-w-[120px] py-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'MAINTENANCE' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Manutenções ({deviceMaintenances.length})</button>
-                        <button onClick={() => setActiveTab('HISTORY')} className={`flex-1 min-w-[120px] py-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'HISTORY' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Histórico & Logs</button>
+                        <button onClick={() => setActiveTab('MAINTENANCE')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'MAINTENANCE' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Manutenções ({deviceMaintenances.length})</button>
+                        <button onClick={() => setActiveTab('HISTORY')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'HISTORY' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>Histórico</button>
                     </>
                 )}
             </div>
@@ -430,6 +673,39 @@ const DeviceManager = () => {
                     </form>
                 )}
 
+                {/* --- TAB: ACCESSORIES (NEW) --- */}
+                {activeTab === 'ACCESSORIES' && (
+                    <div className="space-y-6">
+                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg">
+                            <h4 className="font-bold text-blue-900 mb-2">Adicionar Acessório</h4>
+                            <div className="flex gap-2">
+                                <select className="flex-1 border rounded-lg p-2" value={selectedAccType} onChange={e => setSelectedAccType(e.target.value)}>
+                                    <option value="">Selecione o tipo...</option>
+                                    {accessoryTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                </select>
+                                <button type="button" onClick={handleAddAccessory} className="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700"><Plus/></button>
+                            </div>
+                            <p className="text-xs text-blue-600 mt-2">Use o menu "Configurar Modelos" para cadastrar novos tipos de acessórios.</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            {formData.accessories && formData.accessories.length > 0 ? (
+                                formData.accessories.map((acc, index) => (
+                                    <div key={index} className="flex justify-between items-center p-3 bg-white border rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-3">
+                                            <Plug size={18} className="text-gray-400"/>
+                                            <span className="font-medium text-gray-800">{acc.name}</span>
+                                        </div>
+                                        <button type="button" onClick={() => handleRemoveAccessory(acc.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={16}/></button>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-gray-400 text-center py-4">Nenhum acessório vinculado a este dispositivo.</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* --- TAB: FINANCIAL --- */}
                 {activeTab === 'FINANCIAL' && (
                      <div className="space-y-4">
@@ -457,13 +733,9 @@ const DeviceManager = () => {
                             <div className="flex items-center gap-3">
                                 <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-2">
                                     <Paperclip size={16}/> Anexar Arquivo
-                                    <input type="file" className="hidden" onChange={() => alert('Em produção, isso enviaria o arquivo para o servidor.')} />
+                                    <input type="file" className="hidden" onChange={() => alert('Em breve')} />
                                 </label>
-                                {formData.purchaseInvoiceUrl ? (
-                                    <span className="text-sm text-blue-600 underline cursor-pointer">Ver nota fiscal atual</span>
-                                ) : (
-                                    <span className="text-xs text-gray-400">Nenhum arquivo anexado.</span>
-                                )}
+                                <span className="text-xs text-gray-400">PDF ou Imagem (Máx 5MB)</span>
                             </div>
                         </div>
                      </div>
@@ -472,115 +744,105 @@ const DeviceManager = () => {
                 {/* --- TAB: MAINTENANCE --- */}
                 {activeTab === 'MAINTENANCE' && (
                     <div className="space-y-6">
-                        {/* KPI */}
-                        <div className="bg-orange-50 border border-orange-100 p-4 rounded-lg flex justify-between items-center">
-                            <div>
-                                <h4 className="text-orange-900 font-bold">Custo Total de Manutenção</h4>
-                                <p className="text-sm text-orange-700">Soma de todas as ordens de serviço</p>
+                        {/* New Maintenance Form */}
+                        <div className="bg-orange-50 p-4 rounded-lg border border-orange-100">
+                            <h4 className="font-bold text-orange-900 mb-3 text-sm">Registrar Nova Manutenção</h4>
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-orange-800 mb-1">Tipo</label>
+                                    <select className="w-full border rounded p-2 text-sm" value={newMaint.type} onChange={e => setNewMaint({...newMaint, type: e.target.value as MaintenanceType})}>
+                                        <option value={MaintenanceType.CORRECTIVE}>Corretiva</option>
+                                        <option value={MaintenanceType.PREVENTIVE}>Preventiva</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-orange-800 mb-1">Custo (R$)</label>
+                                    <input type="number" step="0.01" className="w-full border rounded p-2 text-sm" value={newMaint.cost} onChange={e => setNewMaint({...newMaint, cost: parseFloat(e.target.value)})}/>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-semibold text-orange-800 mb-1">Descrição do Serviço</label>
+                                    <input type="text" className="w-full border rounded p-2 text-sm" placeholder="Ex: Troca de Tela" value={newMaint.description || ''} onChange={e => setNewMaint({...newMaint, description: e.target.value})}/>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-semibold text-orange-800 mb-1">Prestador de Serviço</label>
+                                    <input type="text" className="w-full border rounded p-2 text-sm" placeholder="Nome da Assistência" value={newMaint.provider || ''} onChange={e => setNewMaint({...newMaint, provider: e.target.value})}/>
+                                </div>
                             </div>
-                            <div className="text-2xl font-bold text-orange-600">
-                                R$ {totalMaintenanceCost.toFixed(2)}
-                            </div>
+                            <button type="button" onClick={handleAddMaintenance} className="w-full bg-orange-600 text-white py-2 rounded text-sm font-bold hover:bg-orange-700">Adicionar Registro</button>
                         </div>
 
                         {/* List */}
                         <div className="space-y-3">
-                             {deviceMaintenances.map(m => (
-                                 <div key={m.id} className="bg-white border p-3 rounded-lg flex justify-between items-start">
-                                     <div>
-                                         <div className="flex items-center gap-2">
-                                             <span className="font-bold text-gray-700">{m.type}</span>
-                                             <span className="text-xs text-gray-400">{new Date(m.date).toLocaleDateString()}</span>
-                                         </div>
-                                         <p className="text-sm text-gray-600 mt-1">{m.description}</p>
-                                         <p className="text-xs text-gray-500 mt-1">Prestador: {m.provider}</p>
-                                     </div>
-                                     <div className="text-right">
-                                         <span className="font-bold text-gray-800 block">R$ {m.cost.toFixed(2)}</span>
-                                         <button onClick={() => deleteMaintenance(m.id, adminName)} className="text-xs text-red-500 hover:underline mt-2">Remover</button>
-                                     </div>
-                                 </div>
-                             ))}
-                             {deviceMaintenances.length === 0 && <p className="text-center text-gray-400 py-4">Nenhuma manutenção registrada.</p>}
-                        </div>
-
-                        {/* Add New Form */}
-                        <div className="bg-gray-50 p-4 rounded-lg border">
-                            <h5 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wrench size={16}/> Nova Manutenção</h5>
-                            <div className="grid grid-cols-2 gap-3 mb-3">
-                                <select className="border p-2 rounded" value={newMaint.type} onChange={e => setNewMaint({...newMaint, type: e.target.value as MaintenanceType})}>
-                                    {Object.values(MaintenanceType).map(t => <option key={t} value={t}>{t}</option>)}
-                                </select>
-                                <input type="number" placeholder="Custo (R$)" className="border p-2 rounded" value={newMaint.cost || ''} onChange={e => setNewMaint({...newMaint, cost: parseFloat(e.target.value)})}/>
-                                <input type="text" placeholder="Prestador de Serviço" className="border p-2 rounded w-full col-span-2" value={newMaint.provider || ''} onChange={e => setNewMaint({...newMaint, provider: e.target.value})}/>
-                                <textarea placeholder="Descrição do serviço realizado..." className="border p-2 rounded w-full col-span-2" rows={2} value={newMaint.description || ''} onChange={e => setNewMaint({...newMaint, description: e.target.value})}></textarea>
-                            </div>
-                            <button type="button" onClick={handleAddMaintenance} className="w-full bg-slate-800 text-white py-2 rounded hover:bg-slate-700">Adicionar Registro</button>
+                            <h4 className="font-bold text-gray-700 text-sm">Histórico de Manutenções</h4>
+                            {deviceMaintenances.length === 0 && <p className="text-gray-400 text-sm">Nenhum registro encontrado.</p>}
+                            {deviceMaintenances.map(m => (
+                                <div key={m.id} className="bg-white border p-3 rounded-lg text-sm flex justify-between items-start">
+                                    <div>
+                                        <div className="font-bold text-gray-800">{m.description}</div>
+                                        <div className="text-gray-500 text-xs">{new Date(m.date).toLocaleDateString()} • {m.provider}</div>
+                                        <div className="mt-1 inline-block px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">{m.type}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="font-bold text-gray-900">R$ {m.cost.toFixed(2)}</div>
+                                        <button type="button" onClick={() => deleteMaintenance(m.id, adminName)} className="text-red-500 text-xs hover:underline mt-2">Excluir</button>
+                                    </div>
+                                </div>
+                            ))}
+                            {deviceMaintenances.length > 0 && (
+                                <div className="pt-2 border-t flex justify-between items-center">
+                                    <span className="font-bold text-gray-700">Custo Total:</span>
+                                    <span className="font-bold text-xl text-gray-900">R$ {totalMaintenanceCost.toFixed(2)}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
-                
+
                 {/* --- TAB: HISTORY --- */}
                 {activeTab === 'HISTORY' && (
-                    <div className="space-y-6">
-                        <div className="flex items-center gap-2 mb-4">
-                            <History size={20} className="text-blue-600" />
-                            <h4 className="font-bold text-gray-800">Linha do Tempo Completa</h4>
-                        </div>
-                        
-                        <div className="relative border-l-2 border-gray-200 ml-3 space-y-8">
+                    <div className="space-y-4">
+                        <div className="relative border-l-2 border-gray-200 ml-3 space-y-6">
                             {deviceHistory.map((log) => (
                                 <div key={log.id} className="relative pl-6">
                                     <div className={`absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 border-white
                                         ${log.action === ActionType.CHECKOUT ? 'bg-blue-500' : 
                                           log.action === ActionType.CHECKIN ? 'bg-green-500' :
-                                          log.action === ActionType.MAINTENANCE_START ? 'bg-amber-500' :
+                                          log.action === ActionType.MAINTENANCE_START ? 'bg-orange-500' :
                                           'bg-gray-400'
                                         }`}></div>
                                     
-                                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
-                                        <div>
-                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{new Date(log.timestamp).toLocaleString()}</span>
-                                            <h5 className="font-bold text-gray-900 mt-1">{log.action}</h5>
-                                            <p className="text-sm text-gray-600 mt-1">{log.notes || 'Sem observações.'}</p>
-                                        </div>
-                                        <div className="text-xs text-right bg-gray-50 px-2 py-1 rounded border self-start">
-                                            <span className="text-gray-400 block">Responsável</span>
-                                            <span className="font-medium text-gray-700">{log.adminUser}</span>
-                                        </div>
+                                    <div>
+                                        <span className="text-xs font-semibold text-gray-500">{new Date(log.timestamp).toLocaleString()}</span>
+                                        <h5 className="font-bold text-gray-900 text-sm">{log.action}</h5>
+                                        <p className="text-sm text-gray-600">{log.notes || 'Sem detalhes.'}</p>
+                                        <div className="text-xs text-gray-400 mt-1">Admin: {log.adminUser}</div>
                                     </div>
                                 </div>
                             ))}
-                            {deviceHistory.length === 0 && (
-                                <p className="text-gray-400 text-sm pl-6">Nenhum histórico registrado.</p>
-                            )}
+                            {deviceHistory.length === 0 && <p className="text-gray-400 pl-6">Sem histórico registrado.</p>}
                         </div>
                     </div>
                 )}
-            
+
             </div>
 
-            {/* Footer Actions (Only for General/Financial as Maintenance saves instantly) */}
+            {/* Modal Footer */}
             <div className="bg-gray-50 px-6 py-4 border-t flex justify-end gap-3 shrink-0">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">Fechar</button>
-                {(activeTab === 'GENERAL' || activeTab === 'FINANCIAL') && (
-                    <button type="submit" form="deviceForm" onClick={activeTab === 'FINANCIAL' ? handleDeviceSubmit : undefined} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                {activeTab === 'GENERAL' && (
+                    <button type="submit" form="deviceForm" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                         {editingId ? 'Salvar Alterações' : 'Cadastrar Dispositivo'}
                     </button>
                 )}
             </div>
-
           </div>
         </div>
       )}
-
+      
       {/* Model Settings Modal */}
       {isModelSettingsOpen && <ModelSettings onClose={() => setIsModelSettingsOpen(false)} />}
     </div>
   );
 };
-
-// Helper for X icon
-const X = ({size}: {size: number}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 
 export default DeviceManager;

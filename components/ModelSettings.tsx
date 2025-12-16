@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { AssetType, DeviceBrand, DeviceModel } from '../types';
-import { Plus, Trash2, X, Image as ImageIcon, Save, Tag, Box, Layers } from 'lucide-react';
+import { Plus, Trash2, X, Image as ImageIcon, Save, Tag, Box, Layers, Plug } from 'lucide-react';
 
 interface ModelSettingsProps {
   onClose: () => void;
@@ -12,15 +12,17 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onClose }) => {
   const { 
     assetTypes, addAssetType, deleteAssetType,
     brands, addBrand, deleteBrand,
-    models, addModel, updateModel, deleteModel 
+    models, addModel, updateModel, deleteModel,
+    accessoryTypes, addAccessoryType, deleteAccessoryType
   } = useData();
   const { user } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'TYPES' | 'BRANDS' | 'MODELS'>('TYPES');
+  const [activeTab, setActiveTab] = useState<'TYPES' | 'BRANDS' | 'ACCESSORIES' | 'MODELS'>('TYPES');
 
   // Forms
   const [newType, setNewType] = useState('');
   const [newBrand, setNewBrand] = useState('');
+  const [newAccessory, setNewAccessory] = useState('');
   const [modelForm, setModelForm] = useState<Partial<DeviceModel>>({ imageUrl: '' });
 
   const adminName = user?.name || 'Admin';
@@ -35,6 +37,12 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onClose }) => {
     if (!newBrand) return;
     addBrand({ id: Math.random().toString(36).substr(2, 9), name: newBrand }, adminName);
     setNewBrand('');
+  };
+
+  const handleAddAccessory = () => {
+      if (!newAccessory) return;
+      addAccessoryType({ id: Math.random().toString(36).substr(2, 9), name: newAccessory }, adminName);
+      setNewAccessory('');
   };
 
   const handleModelSubmit = (e: React.FormEvent) => {
@@ -54,11 +62,8 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onClose }) => {
 
   // Simulate Image Upload
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // In a real app, this would upload to server. Here we just pretend with a URL or Placeholder
-    // For demo, we might prompt user for URL or just set a placeholder if they click upload
     const file = e.target.files?.[0];
     if (file) {
-        // Create a fake local URL for preview
         const objectUrl = URL.createObjectURL(file);
         setModelForm({ ...modelForm, imageUrl: objectUrl });
     }
@@ -91,6 +96,12 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onClose }) => {
               className={`w-full flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'BRANDS' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
             >
               <Box size={18} /> Marcas / Fabricantes
+            </button>
+            <button 
+              onClick={() => setActiveTab('ACCESSORIES')}
+              className={`w-full flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'ACCESSORIES' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              <Plug size={18} /> Tipos de Acessórios
             </button>
             <button 
               onClick={() => setActiveTab('MODELS')}
@@ -147,6 +158,32 @@ const ModelSettings: React.FC<ModelSettingsProps> = ({ onClose }) => {
                       <div key={b.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border">
                          <span className="font-medium">{b.name}</span>
                          <button onClick={() => deleteBrand(b.id, adminName)} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button>
+                      </div>
+                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* --- ACCESSORIES --- */}
+            {activeTab === 'ACCESSORIES' && (
+              <div className="max-w-xl">
+                <h4 className="text-xl font-bold text-gray-800 mb-4">Catálogo de Acessórios</h4>
+                <p className="text-sm text-gray-500 mb-4">Cadastre aqui itens que acompanham os dispositivos (ex: Carregador, Mouse, Bolsa).</p>
+                <div className="flex gap-2 mb-6">
+                   <input 
+                      type="text" 
+                      placeholder="Novo Acessório (ex: Cabo HDMI)" 
+                      className="flex-1 border rounded-lg p-2"
+                      value={newAccessory}
+                      onChange={e => setNewAccessory(e.target.value)}
+                   />
+                   <button onClick={handleAddAccessory} className="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700"><Plus/></button>
+                </div>
+                <div className="space-y-2">
+                   {accessoryTypes.map(acc => (
+                      <div key={acc.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border">
+                         <span className="font-medium">{acc.name}</span>
+                         <button onClick={() => deleteAccessoryType(acc.id, adminName)} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button>
                       </div>
                    ))}
                 </div>

@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { DataContext, DataContextType } from './DataContext';
-import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term } from '../types';
+import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term, AccessoryType } from '../types';
 
 // API Configuration Relative Path
-// Agora usamos o Nginx como Proxy Reverso.
-// O navegador chama /api/... na porta 8083, e o Nginx repassa para a API na porta 5000 internamente.
-const API_URL = ''; // Deixamos vazio para usar o mesmo host/porta, pois os endpoints abaixo já começam com /api
+const API_URL = ''; 
 
 export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -22,6 +20,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
   const [sectors, setSectors] = useState<UserSector[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
+  const [accessoryTypes, setAccessoryTypes] = useState<AccessoryType[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +34,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // Execute fetches safely using relative paths
         const [
             devicesRes, simsRes, usersRes, logsRes, sysUsersRes, settingsRes, 
-            modelsRes, brandsRes, typesRes, maintRes, sectorsRes, termsRes
+            modelsRes, brandsRes, typesRes, maintRes, sectorsRes, termsRes, accTypesRes
         ] = await Promise.all([
           fetch(`${API_URL}/api/devices`),
           fetch(`${API_URL}/api/sims`),
@@ -48,7 +47,8 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           fetch(`${API_URL}/api/asset-types`),
           fetch(`${API_URL}/api/maintenances`),
           fetch(`${API_URL}/api/sectors`),
-          fetch(`${API_URL}/api/terms`)
+          fetch(`${API_URL}/api/terms`),
+          fetch(`${API_URL}/api/accessory-types`)
         ]);
 
         if (!devicesRes.ok) {
@@ -84,6 +84,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setMaintenances(await maintRes.json());
         if (sectorsRes.ok) setSectors(await sectorsRes.json());
         setTerms(fetchedTerms);
+        if (accTypesRes.ok) setAccessoryTypes(await accTypesRes.json());
         
       } catch (err: any) {
         console.error("API Connection Failed. Verifique se o container API está rodando.", err);
@@ -98,9 +99,6 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Generic POST helper
   const postData = async (endpoint: string, data: any) => {
-    // Note: endpoint passed usually doesn't have /api prefix in the calls below, so we add it if needed
-    // But inspecting the code below, calls are like postData('devices'...).
-    // We need to ensure we hit /api/devices
     const res = await fetch(`${API_URL}/api/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -201,15 +199,82 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setSettings(newSettings);
   };
 
+  // --- Operations Logic Updated to Create Terms ---
   const assignAsset = async (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string, termFile?: File) => {
+    // 1. Log Operation (Checkout)
     const payload = { assetId, assetType, userId, notes, action: 'CHECKOUT', _adminUser: adminName };
     await postData('operations/checkout', payload);
+
+    // 2. Create Term Record (Pending or Signed)
+    // We need asset name for term record
+    let assetName = 'Equipamento';
+    if (assetType === 'Device') {
+        const d = devices.find(x => x.id === assetId);
+        const m = models.find(mod => mod.id === d?.modelId);
+        assetName = `${m?.name} (${d?.assetTag})`;
+    } else {
+        const s = sims.find(x => x.id === assetId);
+        assetName = `Chip ${s?.phoneNumber}`;
+    }
+
+    const termData: Term = {
+        id: Math.random().toString(36).substr(2, 9), // API should ideally generate ID, but we do it here for now
+        userId,
+        type: 'ENTREGA',
+        assetDetails: assetName,
+        date: new Date().toISOString(),
+        fileUrl: termFile ? 'PENDING_UPLOAD' : '' // 'PENDING_UPLOAD' is just a placeholder logic, simpler is empty string if no file
+    };
+
+    // If file exists, in a real app we upload it first to get URL. 
+    // Here we skip file upload logic implementation details and just assume string or empty.
+    // Ideally: const url = await uploadFile(termFile); termData.fileUrl = url;
+    if (termFile) {
+        // Mocking the URL for prod demo (in real world, upload endpoint needed)
+        // Since we don't have file storage in this setup, we just mark it as "Signed" text or leave empty to simulate pending if no storage.
+        // Let's assume we can't really store the file in SQL easily without a blob table.
+        // We will leave it empty if no storage service is implemented, OR use a dummy URL.
+        termData.fileUrl = "signed_doc.pdf"; 
+    } else {
+        termData.fileUrl = "";
+    }
+
+    await postData('terms', termData);
     window.location.reload(); 
   };
 
   const returnAsset = async (assetType: 'Device' | 'Sim', assetId: string, notes: string, adminName: string, termFile?: File) => {
+    // Determine User before checkin
+    let userId = '';
+    let assetName = 'Equipamento';
+    if (assetType === 'Device') {
+        const d = devices.find(x => x.id === assetId);
+        userId = d?.currentUserId || '';
+        const m = models.find(mod => mod.id === d?.modelId);
+        assetName = `${m?.name} (${d?.assetTag})`;
+    } else {
+        const s = sims.find(x => x.id === assetId);
+        userId = s?.currentUserId || '';
+        assetName = `Chip ${s?.phoneNumber}`;
+    }
+
+    // 1. Log Operation
     const payload = { assetId, assetType, notes, action: 'CHECKIN', _adminUser: adminName };
     await postData('operations/checkin', payload);
+
+    // 2. Create Return Term Record
+    if (userId) {
+        const termData: Term = {
+            id: Math.random().toString(36).substr(2, 9),
+            userId,
+            type: 'DEVOLUCAO',
+            assetDetails: assetName,
+            date: new Date().toISOString(),
+            fileUrl: termFile ? "signed_return.pdf" : ""
+        };
+        await postData('terms', termData);
+    }
+
     window.location.reload();
   };
 
@@ -268,9 +333,18 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setSectors(prev => prev.filter(s => s.id !== id));
   };
 
+  const addAccessoryType = async (type: AccessoryType, adminName: string) => {
+      const saved = await postData('accessory-types', { ...type, _adminUser: adminName });
+      setAccessoryTypes(prev => [...prev, saved]);
+  };
+  const deleteAccessoryType = async (id: string, adminName: string) => {
+      await deleteData('accessory-types', id);
+      setAccessoryTypes(prev => prev.filter(t => t.id !== id));
+  };
+
   const value: DataContextType = {
     devices, sims, users, logs, loading, error, systemUsers, settings,
-    models, brands, assetTypes, maintenances, sectors,
+    models, brands, assetTypes, maintenances, sectors, accessoryTypes,
     addDevice, updateDevice, deleteDevice,
     addSim, updateSim, deleteSim,
     addUser, updateUser, toggleUserActive,
@@ -281,7 +355,8 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addBrand, deleteBrand,
     addAssetType, deleteAssetType,
     addMaintenance, deleteMaintenance,
-    addSector, deleteSector
+    addSector, deleteSector,
+    addAccessoryType, deleteAccessoryType
   };
 
   return (

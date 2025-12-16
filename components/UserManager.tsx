@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { User, UserSector, ActionType, Device, SimCard } from '../types';
-import { Plus, Search, Edit2, Trash2, Mail, MapPin, Briefcase, Power, Settings, X, Smartphone, FileText, History, ExternalLink, AlertTriangle, Printer, Link, User as UserIcon } from 'lucide-react';
+import { User, UserSector, ActionType, Device, SimCard, Term } from '../types';
+import { Plus, Search, Edit2, Trash2, Mail, MapPin, Briefcase, Power, Settings, X, Smartphone, FileText, History, ExternalLink, AlertTriangle, Printer, Link, User as UserIcon, Upload, CheckCircle } from 'lucide-react';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
 const UserManager = () => {
@@ -108,6 +108,57 @@ const UserManager = () => {
       });
   };
 
+  // Logic to reprint a historic term based on minimal data
+  const handleReprintHistoricTerm = (term: Term) => {
+      if (!editingId) return;
+      const user = users.find(u => u.id === editingId);
+      if (!user) return;
+
+      // Create a "Ghost" Asset based on term description for printing purposes
+      // This is a simplification. In a real app we might try to find the original asset ID if stored.
+      // Since Term interface has assetDetails string like "Latitude 5420 (Tag: TI-001)", we pass this.
+      
+      // We pass a dummy object that looks like a Device/Sim just enough for the generator
+      // Actually, termGenerator expects a Device or Sim object. 
+      // We will create a fake object and pass the term description as the 'model name' effectively.
+      const ghostAsset: any = {
+          assetTag: 'N/A', // Assuming details are in the name
+          serialNumber: 'N/A'
+      };
+
+      const sectorName = sectors.find(s => s.id === user.sectorId)?.name;
+
+      // We modify the generator slightly or we abuse the props.
+      // Better: Update generator to accept manual override OR just pass the string as the Model Name.
+      // Let's pass a mock model.
+      
+      const mockModel: any = { name: term.assetDetails }; 
+      
+      generateAndPrintTerm({
+          user,
+          asset: ghostAsset,
+          settings,
+          model: mockModel,
+          actionType: term.type,
+          sectorName
+      });
+  };
+
+  const handleAttachFile = (termId: string, file: File) => {
+      // In a real app, upload via API. Here we update local state (Mock or Prod Context handles it).
+      // We'll assume the context handles User updates.
+      if (!editingId) return;
+      
+      const user = users.find(u => u.id === editingId);
+      if (!user || !user.terms) return;
+
+      const updatedTerms = user.terms.map(t => 
+          t.id === termId ? { ...t, fileUrl: URL.createObjectURL(file) } : t
+      );
+
+      updateUser({ ...user, terms: updatedTerms }, adminName);
+  };
+
   const filteredUsers = users.filter(u => 
     u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
     u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -166,12 +217,18 @@ const UserManager = () => {
             <tbody>
               {filteredUsers.map((user) => {
                 const sectorName = sectors.find(s => s.id === user.sectorId)?.name || 'Sem Setor';
+                // Check for pending terms
+                const hasPending = user.terms?.some(t => !t.fileUrl);
+
                 return (
                   <tr key={user.id} className={`border-b hover:bg-gray-50 transition-colors ${!user.active ? 'bg-gray-50 opacity-75' : 'bg-white'}`}>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                         <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${user.active ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-200 text-gray-500'}`}>
+                         <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 relative ${user.active ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-200 text-gray-500'}`}>
                              {user.fullName.charAt(0)}
+                             {hasPending && (
+                                 <span className="absolute -top-1 -right-1 h-3 w-3 bg-orange-500 rounded-full border-2 border-white" title="Termos Pendentes"></span>
+                             )}
                          </div>
                          <div>
                              <div className={`font-bold ${user.active ? 'text-gray-900' : 'text-gray-500'}`}>{user.fullName}</div>
@@ -356,29 +413,49 @@ const UserManager = () => {
                     <div className="space-y-4">
                         <div className="flex justify-between items-center">
                             <h4 className="font-bold text-gray-800">Termos de Responsabilidade</h4>
-                            <span className="text-xs text-gray-500">Gerados na Entrega/Devolução</span>
+                            <span className="text-xs text-gray-500">Histórico de Entrega/Devolução</span>
                         </div>
                         
                         <div className="space-y-2">
-                            {userTerms.slice().reverse().map(term => (
-                                <div key={term.id} className="flex items-center justify-between p-3 bg-white border rounded-lg hover:shadow-sm">
+                            {userTerms.slice().reverse().map(term => {
+                                const isPending = !term.fileUrl;
+                                return (
+                                <div key={term.id} className={`flex items-center justify-between p-3 border rounded-lg hover:shadow-sm ${isPending ? 'bg-orange-50 border-orange-200' : 'bg-white'}`}>
                                     <div className="flex items-center gap-3">
                                         <div className={`p-2 rounded-full ${term.type === 'ENTREGA' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
                                             <FileText size={16} />
                                         </div>
                                         <div>
-                                            <p className="font-bold text-sm text-gray-800">Termo de {term.type === 'ENTREGA' ? 'Entrega' : 'Devolução'}</p>
+                                            <p className="font-bold text-sm text-gray-800 flex items-center gap-2">
+                                                Termo de {term.type === 'ENTREGA' ? 'Entrega' : 'Devolução'}
+                                                {isPending && <span className="text-[10px] bg-orange-200 text-orange-800 px-1.5 py-0.5 rounded font-bold">PENDENTE</span>}
+                                            </p>
                                             <p className="text-xs text-gray-500">{new Date(term.date).toLocaleString()} • {term.assetDetails}</p>
                                         </div>
                                     </div>
-                                    <a href={term.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                        <ExternalLink size={12}/> Visualizar
-                                    </a>
+                                    <div className="flex items-center gap-2">
+                                        {/* Reprint Button */}
+                                        <button onClick={() => handleReprintHistoricTerm(term)} className="flex items-center gap-1 text-xs bg-white border border-gray-300 text-gray-700 px-2 py-1.5 rounded hover:bg-gray-50" title="Reimprimir Documento">
+                                            <Printer size={14}/>
+                                        </button>
+
+                                        {/* View/Upload Action */}
+                                        {isPending ? (
+                                            <label className="flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 cursor-pointer">
+                                                <Upload size={14}/> Anexar
+                                                <input type="file" className="hidden" accept=".pdf,.png,.jpg" onChange={(e) => e.target.files?.[0] && handleAttachFile(term.id, e.target.files[0])} />
+                                            </label>
+                                        ) : (
+                                            <a href={term.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:underline px-2">
+                                                <CheckCircle size={14} className="text-green-500"/> Visualizar
+                                            </a>
+                                        )}
+                                    </div>
                                 </div>
-                            ))}
+                            )})}
                             {userTerms.length === 0 && (
                                 <div className="text-center py-6 text-gray-400 bg-gray-50 rounded-lg border border-dashed">
-                                    Nenhum termo assinado encontrado.
+                                    Nenhum termo gerado para este colaborador.
                                 </div>
                             )}
                         </div>

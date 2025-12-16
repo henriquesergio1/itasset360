@@ -1,7 +1,7 @@
-import { Device, DeviceStatus, SimCard, User, AuditLog, ActionType, SystemUser, SystemRole, SystemSettings, AssetType, DeviceBrand, DeviceModel, MaintenanceRecord, MaintenanceType, UserSector } from '../types';
+import { Device, DeviceStatus, SimCard, User, AuditLog, ActionType, SystemUser, SystemRole, SystemSettings, AssetType, DeviceBrand, DeviceModel, MaintenanceRecord, MaintenanceType, UserSector, AccessoryType } from '../types';
 
 // Texto padrão otimizado para 1 Página A4 com conteúdo Jurídico Completo
-// Versão 1.7.7 - Texto Jurídico Profissional Restaurado
+// Versão 1.7.8 - Inclusão de Observações
 const DEFAULT_TERM_TEMPLATE = `
 <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1f2937; line-height: 1.4; max-width: 100%; margin: 0 auto; padding: 20px 30px; background-color: #fff;">
     
@@ -44,7 +44,7 @@ const DEFAULT_TERM_TEMPLATE = `
 
     <!-- TABELA DE ITENS -->
     <h3 style="font-size: 12px; border-bottom: 1px solid #cbd5e1; margin-bottom: 8px; padding-bottom: 2px; color: #0f172a; text-transform: uppercase;">1. Detalhes do Equipamento</h3>
-    <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 10px;">
         <thead>
             <tr style="background-color: #f1f5f9;">
                 <th style="border: 1px solid #cbd5e1; padding: 6px; text-align: left; width: 60%;">Descrição / Modelo</th>
@@ -66,6 +66,11 @@ const DEFAULT_TERM_TEMPLATE = `
             {CHIP_VINCULADO_HTML}
         </tbody>
     </table>
+
+    <!-- OBSERVAÇÕES -->
+    <div style="margin-bottom: 20px; font-size: 11px; color: #333; background-color: #fffbeb; padding: 8px; border: 1px solid #fcd34d; border-radius: 4px;">
+        <strong>Observações / Estado de Conservação:</strong> {OBSERVACOES}
+    </div>
 
     <!-- CLAUSULAS COMPLETAS -->
     <h3 style="font-size: 12px; border-bottom: 1px solid #cbd5e1; margin-bottom: 8px; padding-bottom: 2px; color: #0f172a; text-transform: uppercase;">2. Condições Gerais de Uso e Responsabilidade</h3>
@@ -107,12 +112,91 @@ const DEFAULT_TERM_TEMPLATE = `
 </div>
 `;
 
+const DEFAULT_RETURN_TEMPLATE = `
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1f2937; line-height: 1.4; max-width: 100%; margin: 0 auto; padding: 20px 30px; background-color: #fff;">
+    
+    <!-- HEADER -->
+    <table style="width: 100%; border-bottom: 2px solid #1f2937; margin-bottom: 15px; padding-bottom: 5px;">
+        <tr>
+            <td style="width: 25%; vertical-align: middle;">
+                 <img src="{LOGO_URL}" alt="Logo" style="max-height: 60px; max-width: 150px; object-fit: contain;" onerror="this.style.display='none'"/>
+            </td>
+            <td style="width: 75%; text-align: right; vertical-align: middle;">
+                <h1 style="margin: 0; font-size: 18px; font-weight: bold; color: #1f2937;">{NOME_EMPRESA}</h1>
+                <p style="margin: 0; font-size: 11px; color: #4b5563;">CNPJ: {CNPJ}</p>
+                <h2 style="margin: 5px 0 0 0; text-transform: uppercase; font-size: 14px; color: #4b5563;">Termo de Devolução</h2>
+                <p style="margin: 0; font-size: 10px; color: #6b7280; text-transform: uppercase;">RECIBO DE ENTREGA DE EQUIPAMENTO</p>
+            </td>
+        </tr>
+    </table>
+
+    <!-- DADOS DO COLABORADOR -->
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+        <table style="width: 100%; font-size: 11px;">
+            <tr>
+                <td style="font-weight: bold; width: 15%; color: #475569;">Colaborador:</td>
+                <td style="width: 45%;">{NOME_COLABORADOR}</td>
+                <td style="font-weight: bold; width: 10%; color: #475569;">CPF:</td>
+                <td style="width: 30%;">{CPF}</td>
+            </tr>
+            <tr>
+                <td style="font-weight: bold; color: #475569;">Setor:</td>
+                <td>{NOME_SETOR}</td>
+                <td style="font-weight: bold; color: #475569;">RG:</td>
+                <td>{RG}</td>
+            </tr>
+        </table>
+    </div>
+
+    <p style="text-align: justify; font-size: 11px; margin-bottom: 15px; color: #333;">
+        Declaro que devolvi à empresa <strong>{NOME_EMPRESA}</strong> os equipamentos e acessórios descritos abaixo, cessando minha responsabilidade sobre a guarda dos mesmos a partir desta data.
+    </p>
+
+    <!-- CHECKLIST INJETADO AQUI -->
+    <!-- TABELA DE ITENS -->
+
+    <!-- OBSERVAÇÕES -->
+    <div style="margin-bottom: 20px; font-size: 11px; color: #333; background-color: #fffbeb; padding: 8px; border: 1px solid #fcd34d; border-radius: 4px;">
+        <strong>Observações / Pendências:</strong> {OBSERVACOES}
+    </div>
+
+    <!-- CLAUSULAS COMPLETAS -->
+    
+    <!-- ASSINATURA ÚNICA -->
+    <div style="margin-top: 30px; page-break-inside: avoid;">
+        <p style="text-align: center; margin-bottom: 35px; font-size: 11px;">{CIDADE_DATA}</p>
+        
+        <table style="width: 100%; text-align: center;">
+            <tr>
+                <td style="width: 50%;">
+                    <div style="border-top: 1px solid #000; padding-top: 5px; width: 90%; margin: 0 auto;">
+                        <strong style="font-size: 12px; color: #000; text-transform: uppercase;">{NOME_COLABORADOR}</strong><br>
+                        <span style="font-size: 10px; color: #64748b;">Colaborador (Devolvente)</span>
+                    </div>
+                </td>
+                <td style="width: 50%;">
+                    <div style="border-top: 1px solid #000; padding-top: 5px; width: 90%; margin: 0 auto;">
+                        <strong style="font-size: 12px; color: #000; text-transform: uppercase;">DEPARTAMENTO DE T.I.</strong><br>
+                        <span style="font-size: 10px; color: #64748b;">Responsável pelo Recebimento</span>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div style="margin-top: 20px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 5px;">
+        Documento gerado digitalmente pelo sistema IT Asset 360 • {ID_TERMO_AUTO}
+    </div>
+</div>
+`;
+
 // Mock Config Data
 export const mockSystemSettings: SystemSettings = {
   appName: 'IT Asset 360',
   cnpj: '00.000.000/0001-00',
   logoUrl: '',
-  termTemplate: DEFAULT_TERM_TEMPLATE
+  termTemplate: DEFAULT_TERM_TEMPLATE,
+  returnTermTemplate: DEFAULT_RETURN_TEMPLATE
 };
 
 export const mockSystemUsers: SystemUser[] = [
@@ -140,6 +224,13 @@ export const mockAssetTypes: AssetType[] = [
   { id: 't2', name: 'Smartphone' },
   { id: 't3', name: 'Tablet' },
   { id: 't4', name: 'Monitor' }
+];
+
+export const mockAccessoryTypes: AccessoryType[] = [
+    { id: 'ac1', name: 'Carregador Original' },
+    { id: 'ac2', name: 'Mouse Sem Fio' },
+    { id: 'ac3', name: 'Mochila' },
+    { id: 'ac4', name: 'Capa Protetora' }
 ];
 
 export const mockBrands: DeviceBrand[] = [

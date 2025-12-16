@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { SystemUser, SystemRole, ActionType } from '../types';
-import { Shield, Settings, Activity, Trash2, Plus, X, Edit2, Save, Database, Server, FileCode, FileText, Bold, Italic, Heading1, List, Eye } from 'lucide-react';
+import { Shield, Settings, Activity, Trash2, Plus, X, Edit2, Save, Database, Server, FileCode, FileText, Bold, Italic, Heading1, List, Eye, ArrowLeftRight } from 'lucide-react';
 
 const AdminPanel = () => {
   const { systemUsers, addSystemUser, updateSystemUser, deleteSystemUser, settings, updateSettings, logs } = useData();
@@ -23,6 +23,7 @@ const AdminPanel = () => {
   
   // Template Preview State
   const [showTemplatePreview, setShowTemplatePreview] = useState(false);
+  const [activeTemplateType, setActiveTemplateType] = useState<'DELIVERY' | 'RETURN'>('DELIVERY'); // NEW: Switch between templates
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -70,18 +71,32 @@ const AdminPanel = () => {
   };
 
   // --- Rich Text Editor Helpers ---
+  const getCurrentTemplateContent = () => {
+      return activeTemplateType === 'DELIVERY' 
+        ? settingsForm.termTemplate 
+        : settingsForm.returnTermTemplate;
+  };
+
+  const updateCurrentTemplateContent = (newContent: string) => {
+      if (activeTemplateType === 'DELIVERY') {
+          setSettingsForm({ ...settingsForm, termTemplate: newContent });
+      } else {
+          setSettingsForm({ ...settingsForm, returnTermTemplate: newContent });
+      }
+  };
+
   const insertTag = (tagStart: string, tagEnd: string) => {
       const textarea = textareaRef.current;
       if (!textarea) return;
 
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const text = settingsForm.termTemplate || '';
+      const text = getCurrentTemplateContent() || '';
       
       const selectedText = text.substring(start, end);
       const newText = text.substring(0, start) + tagStart + selectedText + tagEnd + text.substring(end);
 
-      setSettingsForm({ ...settingsForm, termTemplate: newText });
+      updateCurrentTemplateContent(newText);
       
       // Restore focus and cursor
       setTimeout(() => {
@@ -96,10 +111,10 @@ const AdminPanel = () => {
       
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const text = settingsForm.termTemplate || '';
+      const text = getCurrentTemplateContent() || '';
 
       const newText = text.substring(0, start) + variable + text.substring(end);
-      setSettingsForm({ ...settingsForm, termTemplate: newText });
+      updateCurrentTemplateContent(newText);
 
       setTimeout(() => {
         textarea.focus();
@@ -132,7 +147,7 @@ const AdminPanel = () => {
             onClick={() => setActiveTab('TEMPLATE')}
             className={`flex items-center gap-2 px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'TEMPLATE' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
-            <FileText size={18} /> Modelo do Termo
+            <FileText size={18} /> Modelos de Termo
         </button>
         <button 
             onClick={() => setActiveTab('LOGS')}
@@ -284,8 +299,8 @@ const AdminPanel = () => {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-fade-in flex flex-col h-[800px]">
               <div className="flex justify-between items-center mb-4 shrink-0">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800">Modelo do Termo de Responsabilidade</h3>
-                    <p className="text-sm text-gray-500">Personalize o documento gerado na entrega/devolução.</p>
+                    <h3 className="text-lg font-bold text-gray-800">Editores de Documentos</h3>
+                    <p className="text-sm text-gray-500">Personalize os termos gerados na entrega e devolução.</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => setShowTemplatePreview(!showTemplatePreview)} className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50">
@@ -295,6 +310,22 @@ const AdminPanel = () => {
                         <Save size={18} /> Salvar
                     </button>
                   </div>
+              </div>
+
+              {/* Template Switcher */}
+              <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
+                  <button 
+                    onClick={() => setActiveTemplateType('DELIVERY')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTemplateType === 'DELIVERY' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                      <FileText size={16}/> Termo de Entrega
+                  </button>
+                  <button 
+                    onClick={() => setActiveTemplateType('RETURN')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTemplateType === 'RETURN' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                      <ArrowLeftRight size={16}/> Termo de Devolução
+                  </button>
               </div>
               
               {!showTemplatePreview ? (
@@ -311,13 +342,19 @@ const AdminPanel = () => {
                             <div className="w-px h-6 bg-gray-300 mx-1"></div>
                             <button type="button" onClick={() => insertTag('<br/>', '')} className="p-2 hover:bg-gray-200 rounded text-gray-700 text-xs font-mono" title="Quebra de Linha">BR</button>
                             <button type="button" onClick={() => insertTag('<hr/>', '')} className="p-2 hover:bg-gray-200 rounded text-gray-700 text-xs font-mono" title="Linha Horizontal">HR</button>
+                            <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                            {activeTemplateType === 'RETURN' && (
+                                <button type="button" onClick={() => insertTag('<!-- TABELA DE ITENS -->', '')} className="px-3 py-1 bg-orange-100 text-orange-700 text-xs rounded font-bold border border-orange-200" title="Local onde o checklist será inserido">
+                                    INSERIR POSIÇÃO DO CHECKLIST
+                                </button>
+                            )}
                         </div>
                         
                         <textarea 
                             ref={textareaRef}
                             className="w-full flex-1 p-4 font-mono text-sm resize-none outline-none focus:bg-blue-50/10"
-                            value={settingsForm.termTemplate || ''}
-                            onChange={(e) => setSettingsForm({...settingsForm, termTemplate: e.target.value})}
+                            value={getCurrentTemplateContent() || ''}
+                            onChange={(e) => updateCurrentTemplateContent(e.target.value)}
                         />
                     </div>
                     
@@ -353,7 +390,7 @@ const AdminPanel = () => {
                 </div>
               ) : (
                   <div className="flex-1 border rounded-lg p-8 overflow-y-auto bg-gray-50">
-                      <div className="bg-white shadow-lg p-10 max-w-3xl mx-auto min-h-[600px]" dangerouslySetInnerHTML={{ __html: settingsForm.termTemplate || '' }}></div>
+                      <div className="bg-white shadow-lg p-10 max-w-3xl mx-auto min-h-[600px]" dangerouslySetInnerHTML={{ __html: getCurrentTemplateContent() || '' }}></div>
                   </div>
               )}
           </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DataContext, DataContextType } from './DataContext';
-import { Device, SimCard, User, AuditLog, DeviceStatus, ActionType, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term } from '../types';
-import { mockDevices, mockSims, mockUsers, mockAuditLogs, mockSystemUsers, mockSystemSettings, mockModels, mockBrands, mockAssetTypes, mockMaintenanceRecords, mockSectors } from '../services/mockService';
+import { Device, SimCard, User, AuditLog, DeviceStatus, ActionType, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term, AccessoryType } from '../types';
+import { mockDevices, mockSims, mockUsers, mockAuditLogs, mockSystemUsers, mockSystemSettings, mockModels, mockBrands, mockAssetTypes, mockMaintenanceRecords, mockSectors, mockAccessoryTypes } from '../services/mockService';
 
 export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [devices, setDevices] = useState<Device[]>(mockDevices);
@@ -17,10 +17,11 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [assetTypes, setAssetTypes] = useState<AssetType[]>(mockAssetTypes);
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>(mockMaintenanceRecords);
   const [sectors, setSectors] = useState<UserSector[]>(mockSectors);
+  const [accessoryTypes, setAccessoryTypes] = useState<AccessoryType[]>(mockAccessoryTypes || []);
 
   const logAction = (
     action: ActionType, 
-    assetType: 'Device' | 'Sim' | 'User' | 'System' | 'Model' | 'Brand' | 'Type' | 'Sector', 
+    assetType: 'Device' | 'Sim' | 'User' | 'System' | 'Model' | 'Brand' | 'Type' | 'Sector' | 'Accessory', 
     assetId: string, 
     targetName: string, 
     adminName: string, 
@@ -175,6 +176,16 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setModels(prev => prev.filter(m => m.id !== id));
     logAction(ActionType.DELETE, 'Model', id, 'Modelo', adminName);
   };
+  
+  const addAccessoryType = (type: AccessoryType, adminName: string) => {
+      setAccessoryTypes(prev => [...prev, type]);
+      logAction(ActionType.create, 'Accessory', type.id, type.name, adminName);
+  };
+  
+  const deleteAccessoryType = (id: string, adminName: string) => {
+      setAccessoryTypes(prev => prev.filter(t => t.id !== id));
+      logAction(ActionType.DELETE, 'Accessory', id, 'Tipo Acessório', adminName);
+  };
 
   // --- Maintenance ---
   const addMaintenance = (record: MaintenanceRecord, adminName: string) => {
@@ -188,8 +199,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // --- Operations (Assignments & Returns) ---
   const assignAsset = (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string, termFile?: File) => {
-    // 1. Prepare Term Object if file exists
-    let newTerm: Term | undefined;
+    // 1. Prepare Term Object
     let assetNameForTerm = '';
 
     // 2. Resolve Asset
@@ -221,20 +231,18 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (user) logAction(ActionType.CHECKOUT, 'User', user.id, user.fullName, adminName, `Recebeu: ${assetNameForTerm}. Obs: ${notes}`);
     }
 
-    // 3. Save Term if provided
-    if (termFile) {
-        const fileUrl = URL.createObjectURL(termFile); // Mock URL
-        newTerm = {
-            id: Math.random().toString(36).substr(2, 9),
-            userId,
-            type: 'ENTREGA',
-            assetDetails: assetNameForTerm,
-            date: new Date().toISOString(),
-            fileUrl
-        };
-        // Append term to user
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, terms: [...(u.terms || []), newTerm!] } : u));
-    }
+    // 3. Save Term (Always create pending term if no file)
+    const fileUrl = termFile ? URL.createObjectURL(termFile) : ''; // Empty means Pending
+    const newTerm: Term = {
+        id: Math.random().toString(36).substr(2, 9),
+        userId,
+        type: 'ENTREGA',
+        assetDetails: assetNameForTerm,
+        date: new Date().toISOString(),
+        fileUrl
+    };
+    // Append term to user
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, terms: [...(u.terms || []), newTerm] } : u));
   };
 
   const returnAsset = (assetType: 'Device' | 'Sim', assetId: string, notes: string, adminName: string, termFile?: File) => {
@@ -265,9 +273,9 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (user) logAction(ActionType.CHECKIN, 'User', user.id, user.fullName, adminName, `Devolveu: ${assetNameForTerm}. Obs: ${notes}`);
     }
 
-    // Save Return Term if provided
-    if (termFile && userId) {
-        const fileUrl = URL.createObjectURL(termFile);
+    // Save Return Term (Always create)
+    if (userId) {
+        const fileUrl = termFile ? URL.createObjectURL(termFile) : '';
         const newTerm: Term = {
             id: Math.random().toString(36).substr(2, 9),
             userId,
@@ -286,7 +294,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const value: DataContextType = {
     devices, sims, users, logs, loading: false, error: null, systemUsers, settings,
-    models, brands, assetTypes, maintenances, sectors,
+    models, brands, assetTypes, maintenances, sectors, accessoryTypes,
     addDevice, updateDevice, deleteDevice,
     addSim, updateSim, deleteSim,
     addUser, updateUser, toggleUserActive,
@@ -297,7 +305,8 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addBrand, deleteBrand,
     addModel, updateModel, deleteModel,
     addMaintenance, deleteMaintenance,
-    addSector, deleteSector
+    addSector, deleteSector,
+    addAccessoryType, deleteAccessoryType
   };
 
   return (

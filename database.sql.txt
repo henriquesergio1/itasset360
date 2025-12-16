@@ -1,17 +1,14 @@
--- Script Completo de Criação de Tabelas - IT Asset 360 (Versão 1.7.7)
--- Execute este script no seu banco de dados SQL Server (ex: ITAsset360)
-
--- =============================================
--- 1. TABELAS DE CONFIGURAÇÃO E AUXILIARES
--- =============================================
+-- Script Completo de Criação de Tabelas - IT Asset 360 (Versão 1.8.0)
+-- Atualizado para Suporte a Acessórios e Pendências
 
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SystemSettings')
 CREATE TABLE SystemSettings (
-    Id INT PRIMARY KEY IDENTITY(1,1), -- Único registro
+    Id INT PRIMARY KEY IDENTITY(1,1),
     AppName NVARCHAR(100),
     Cnpj NVARCHAR(20),
     LogoUrl NVARCHAR(MAX),
-    TermTemplate NVARCHAR(MAX) -- HTML do termo
+    TermTemplate NVARCHAR(MAX),
+    ReturnTermTemplate NVARCHAR(MAX)
 );
 
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SystemUsers')
@@ -19,8 +16,8 @@ CREATE TABLE SystemUsers (
     Id NVARCHAR(50) PRIMARY KEY,
     Name NVARCHAR(100) NOT NULL,
     Email NVARCHAR(100) NOT NULL,
-    Password NVARCHAR(100) NOT NULL, -- Em prod, idealmente hash
-    Role NVARCHAR(20) NOT NULL, -- 'ADMIN' ou 'OPERATOR'
+    Password NVARCHAR(100) NOT NULL,
+    Role NVARCHAR(20) NOT NULL,
     AvatarUrl NVARCHAR(MAX)
 );
 
@@ -33,18 +30,32 @@ CREATE TABLE Sectors (
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AssetTypes')
 CREATE TABLE AssetTypes (
     Id NVARCHAR(50) PRIMARY KEY,
-    Name NVARCHAR(100) NOT NULL -- Notebook, Smartphone, etc.
+    Name NVARCHAR(100) NOT NULL
 );
 
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Brands')
 CREATE TABLE Brands (
     Id NVARCHAR(50) PRIMARY KEY,
-    Name NVARCHAR(100) NOT NULL -- Dell, Apple, Samsung
+    Name NVARCHAR(100) NOT NULL
 );
 
--- =============================================
--- 2. TABELAS DE CADASTRO (Modelos e Usuários)
--- =============================================
+-- NOVAS TABELAS DE ACESSÓRIOS --
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AccessoryTypes')
+CREATE TABLE AccessoryTypes (
+    Id NVARCHAR(50) PRIMARY KEY,
+    Name NVARCHAR(100) NOT NULL -- Ex: Carregador, Mouse, Mochila
+);
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DeviceAccessories')
+CREATE TABLE DeviceAccessories (
+    Id NVARCHAR(50) PRIMARY KEY,
+    DeviceId NVARCHAR(50) NOT NULL,
+    AccessoryTypeId NVARCHAR(50) NOT NULL,
+    Name NVARCHAR(100), -- Nome específico (ex: Carregador 65W Dell)
+    CONSTRAINT FK_DevAcc_Devices FOREIGN KEY (DeviceId) REFERENCES Devices(Id) ON DELETE CASCADE,
+    CONSTRAINT FK_DevAcc_Type FOREIGN KEY (AccessoryTypeId) REFERENCES AccessoryTypes(Id)
+);
+----------------------------------
 
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Models')
 CREATE TABLE Models (
@@ -69,12 +80,10 @@ CREATE TABLE Users (
     SectorId NVARCHAR(50),
     JobTitle NVARCHAR(100),
     Active BIT DEFAULT 1,
+    HasPendingIssues BIT DEFAULT 0, -- Nova Coluna
+    PendingIssuesNote NVARCHAR(MAX), -- Nova Coluna
     CONSTRAINT FK_Users_Sectors FOREIGN KEY (SectorId) REFERENCES Sectors(Id)
 );
-
--- =============================================
--- 3. TABELAS DE ATIVOS (Chips e Dispositivos)
--- =============================================
 
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SimCards')
 CREATE TABLE SimCards (
@@ -91,49 +100,32 @@ CREATE TABLE SimCards (
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Devices')
 CREATE TABLE Devices (
     Id NVARCHAR(50) PRIMARY KEY,
-    
-    -- Relacionamento com Modelo
     ModelId NVARCHAR(50), 
-    
-    -- Identificação
     SerialNumber NVARCHAR(50),
-    AssetTag NVARCHAR(50), -- Patrimônio / Hostname
-    Imei NVARCHAR(50),     -- Para Celulares
-    PulsusId NVARCHAR(50), -- ID MDM
-    
-    -- Estado
+    AssetTag NVARCHAR(50),
+    Imei NVARCHAR(50),
+    PulsusId NVARCHAR(50),
     Status NVARCHAR(50) NOT NULL,
     CurrentUserId NVARCHAR(50) NULL,
-    
-    -- Localização e Custos
-    SectorId NVARCHAR(50), -- Localização do ativo
+    SectorId NVARCHAR(50),
     CostCenter NVARCHAR(50),
-    
-    -- Vínculo
-    LinkedSimId NVARCHAR(50) NULL, -- Vínculo com Chip
-
-    -- Financeiro
+    LinkedSimId NVARCHAR(50) NULL,
     PurchaseDate DATE,
     PurchaseCost DECIMAL(18, 2),
     InvoiceNumber NVARCHAR(50),
     Supplier NVARCHAR(100),
     PurchaseInvoiceUrl NVARCHAR(MAX),
-
     CONSTRAINT FK_Devices_Models FOREIGN KEY (ModelId) REFERENCES Models(Id),
     CONSTRAINT FK_Devices_Users FOREIGN KEY (CurrentUserId) REFERENCES Users(Id),
     CONSTRAINT FK_Devices_Sectors FOREIGN KEY (SectorId) REFERENCES Sectors(Id),
     CONSTRAINT FK_Devices_SimCards FOREIGN KEY (LinkedSimId) REFERENCES SimCards(Id)
 );
 
--- =============================================
--- 4. TABELAS DE HISTÓRICO E OPERAÇÕES
--- =============================================
-
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'MaintenanceRecords')
 CREATE TABLE MaintenanceRecords (
     Id NVARCHAR(50) PRIMARY KEY,
     DeviceId NVARCHAR(50) NOT NULL,
-    Type NVARCHAR(50), -- Preventiva, Corretiva
+    Type NVARCHAR(50),
     Date DATETIME2,
     Description NVARCHAR(MAX),
     Cost DECIMAL(18, 2),
@@ -146,10 +138,10 @@ IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Terms')
 CREATE TABLE Terms (
     Id NVARCHAR(50) PRIMARY KEY,
     UserId NVARCHAR(50) NOT NULL,
-    Type NVARCHAR(20), -- ENTREGA ou DEVOLUCAO
+    Type NVARCHAR(20),
     AssetDetails NVARCHAR(255),
     Date DATETIME2,
-    FileUrl NVARCHAR(MAX), -- Link para o arquivo gerado/assinado
+    FileUrl NVARCHAR(MAX),
     CONSTRAINT FK_Terms_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
 );
 
@@ -157,24 +149,16 @@ IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AuditLogs')
 CREATE TABLE AuditLogs (
     Id NVARCHAR(50) PRIMARY KEY,
     AssetId NVARCHAR(50),
-    AssetType NVARCHAR(50), -- Device, Sim, User, System
+    AssetType NVARCHAR(50),
     TargetName NVARCHAR(100),
-    Action NVARCHAR(50), -- CREATE, UPDATE, CHECKOUT, CHECKIN
+    Action NVARCHAR(50),
     Timestamp DATETIME2 DEFAULT GETDATE(),
     Notes NVARCHAR(MAX),
-    AdminUser NVARCHAR(100) -- Quem realizou a ação
+    AdminUser NVARCHAR(100)
 );
 
--- =============================================
--- 5. DADOS INICIAIS (SEED)
--- =============================================
-
-IF NOT EXISTS (SELECT * FROM SystemSettings)
-INSERT INTO SystemSettings (AppName, LogoUrl) VALUES ('IT Asset 360', '');
-
-IF NOT EXISTS (SELECT * FROM SystemUsers)
-INSERT INTO SystemUsers (Id, Name, Email, Password, Role) VALUES ('admin1', 'Administrador', 'admin@empresa.com', 'admin', 'ADMIN');
-
--- Dados padrão básicos para não quebrar a UI se estiver vazio
+-- Seed Minimal
+IF NOT EXISTS (SELECT * FROM SystemSettings) INSERT INTO SystemSettings (AppName, LogoUrl) VALUES ('IT Asset 360', '');
+IF NOT EXISTS (SELECT * FROM SystemUsers) INSERT INTO SystemUsers (Id, Name, Email, Password, Role) VALUES ('admin1', 'Administrador', 'admin@empresa.com', 'admin', 'ADMIN');
 IF NOT EXISTS (SELECT * FROM Brands) INSERT INTO Brands (Id, Name) VALUES ('b1', 'Genérica');
 IF NOT EXISTS (SELECT * FROM AssetTypes) INSERT INTO AssetTypes (Id, Name) VALUES ('t1', 'Outros');
