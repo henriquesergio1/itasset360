@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  # Backend API (Node.js)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.txt # Usando o mesmo contexto, mas sobrescrevendo o comando
+    command: npm run server
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_SERVER=10.10.10.100
+      - DB_PORT=1433
+      - DB_DATABASE=ITAsset360
+      - DB_USER=sa
+      - DB_PASSWORD=#41nhAsa#@@2
+      - PORT=5000
+    networks:
+      - it-asset-net
+
   # Frontend Application (React + Nginx)
   app:
     build:
@@ -13,15 +31,10 @@ services:
     ports:
       - "8083:80"
     environment:
-      # URL da API Backend
+      # O navegador do usuário (Client Side) acessa a API via localhost:5000
       - REACT_APP_API_URL=http://localhost:5000/api
-      
-      # Configuração do SQL Server Externo (Para uso do Backend)
-      - DB_SERVER=10.10.10.100  # IP ou Host do Servidor SQL na rede
-      - DB_PORT=1433
-      - DB_DATABASE=ITAsset360
-      - DB_USER=sa
-      - DB_PASSWORD=#41nhAsa#@@2
+    depends_on:
+      - api
     networks:
       - it-asset-net
 
