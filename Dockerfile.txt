@@ -10,8 +10,21 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# --- FIX STRUCTURE FOR REACT SCRIPTS ---
+# Create standard CRA directories
+RUN mkdir -p public src
+
+# Move Static Assets to public/
+RUN [ -f index.html ] && mv index.html public/
+RUN [ -f metadata.json ] && mv metadata.json public/
+
+# Move Source Code to src/
+# We explicitly move folders and TS/TSX files.
+# IMPORTANT: We DO NOT move 'server.js' so it stays in root and is IGNORED by react-scripts build.
+RUN mv components contexts services utils src/ 2>/dev/null || true
+RUN mv *.tsx *.ts src/ 2>/dev/null || true
+
 # IMPORTANT: Set CI=false to treat warnings as warnings, NOT errors.
-# This fixes the build failure caused by "cdn.tailwindcss.com should not be used in production".
 RUN CI=false npm run build
 
 # Stage 2: Serve with Nginx
@@ -21,7 +34,6 @@ FROM nginx:alpine
 RUN rm -rf /usr/share/nginx/html/*
 
 # Copy static assets from builder stage
-# react-scripts creates a 'build' folder, not 'dist'
 COPY --from=build /app/build /usr/share/nginx/html
 
 # Copy custom nginx config

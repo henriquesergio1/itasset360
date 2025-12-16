@@ -29,6 +29,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const fetchData = async () => {
       try {
         setLoading(true);
+        // Execute fetches safely
         const [
             devicesRes, simsRes, usersRes, logsRes, sysUsersRes, settingsRes, 
             modelsRes, brandsRes, typesRes, maintRes, sectorsRes, termsRes
@@ -49,9 +50,13 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         if (!devicesRes.ok) throw new Error('Falha ao carregar dados da API');
 
+        // Process Users and Terms safely
         const fetchedUsers: User[] = await usersRes.json();
-        // Correction: Check .ok property before awaiting json
-        const fetchedTerms: Term[] = termsRes.ok ? await termsRes.json() : [];
+        
+        let fetchedTerms: Term[] = [];
+        if (termsRes.ok) {
+            fetchedTerms = await termsRes.json();
+        }
 
         // Map terms into users structure
         const usersWithTerms = fetchedUsers.map(u => ({
@@ -75,7 +80,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setTerms(fetchedTerms);
         
       } catch (err: any) {
-        console.error(err);
+        console.error("API Error:", err);
         setError(err.message);
       } finally {
         setLoading(false);
