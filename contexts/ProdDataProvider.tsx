@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DataContext, DataContextType } from './DataContext';
-import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector } from '../types';
+import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term } from '../types';
 
 // API Configuration
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -19,6 +19,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [assetTypes, setAssetTypes] = useState<AssetType[]>([]);
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
   const [sectors, setSectors] = useState<UserSector[]>([]);
+  const [terms, setTerms] = useState<Term[]>([]); // Estado local para termos
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,36 +29,49 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [devicesRes, simsRes, usersRes, logsRes, sysUsersRes, settingsRes, modelsRes, brandsRes, typesRes, maintRes, sectorsRes] = await Promise.all([
+        const [
+            devicesRes, simsRes, usersRes, logsRes, sysUsersRes, settingsRes, 
+            modelsRes, brandsRes, typesRes, maintRes, sectorsRes, termsRes
+        ] = await Promise.all([
           fetch(`${API_URL}/devices`),
           fetch(`${API_URL}/sims`),
           fetch(`${API_URL}/users`),
           fetch(`${API_URL}/logs`),
           fetch(`${API_URL}/system-users`),
           fetch(`${API_URL}/settings`),
-          // New fetches
           fetch(`${API_URL}/models`),
           fetch(`${API_URL}/brands`),
           fetch(`${API_URL}/asset-types`),
           fetch(`${API_URL}/maintenances`),
-          fetch(`${API_URL}/sectors`)
+          fetch(`${API_URL}/sectors`),
+          fetch(`${API_URL}/terms`) // Fetch terms explicitly
         ]);
 
         if (!devicesRes.ok) throw new Error('Falha ao carregar dados da API');
 
+        const fetchedUsers: User[] = await usersRes.json();
+        const fetchedTerms: Term[] = await termsRes.ok ? await termsRes.json() : [];
+
+        // Map terms into users structure to maintain Frontend compatibility
+        const usersWithTerms = fetchedUsers.map(u => ({
+            ...u,
+            terms: fetchedTerms.filter(t => t.userId === u.id)
+        }));
+
         setDevices(await devicesRes.json());
         setSims(await simsRes.json());
-        setUsers(await usersRes.json());
+        setUsers(usersWithTerms);
         setLogs(await logsRes.json());
+        
         if (sysUsersRes.ok) setSystemUsers(await sysUsersRes.json());
         if (settingsRes.ok) setSettings(await settingsRes.json());
         
-        // Set new state
         setModels(await modelsRes.json());
         setBrands(await brandsRes.json());
         setAssetTypes(await typesRes.json());
         setMaintenances(await maintRes.json());
         if (sectorsRes.ok) setSectors(await sectorsRes.json());
+        setTerms(fetchedTerms);
         
       } catch (err: any) {
         console.error(err);
@@ -132,7 +146,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addUser = async (user: User, adminName: string) => {
     const saved = await postData('users', { ...user, _adminUser: adminName });
-    setUsers(prev => [...prev, saved]);
+    setUsers(prev => [...prev, { ...saved, terms: [] }]);
   };
 
   const updateUser = async (user: User, adminName: string) => {
@@ -172,13 +186,16 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setSettings(newSettings);
   };
 
-  const assignAsset = async (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string) => {
+  const assignAsset = async (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string, termFile?: File) => {
+    // Nota: O backend deve lidar com a criação do registro na tabela 'Terms' se um arquivo for enviado ou gerado.
     const payload = { assetId, assetType, userId, notes, action: 'CHECKOUT', _adminUser: adminName };
+    
+    // Se houver arquivo, a lógica seria diferente (FormData), mas mantendo simples para o exemplo SQL:
     await postData('operations/checkout', payload);
     window.location.reload(); 
   };
 
-  const returnAsset = async (assetType: 'Device' | 'Sim', assetId: string, notes: string, adminName: string) => {
+  const returnAsset = async (assetType: 'Device' | 'Sim', assetId: string, notes: string, adminName: string, termFile?: File) => {
     const payload = { assetId, assetType, notes, action: 'CHECKIN', _adminUser: adminName };
     await postData('operations/checkin', payload);
     window.location.reload();

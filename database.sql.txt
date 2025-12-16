@@ -1,71 +1,154 @@
--- Script de Criação de Tabelas - IT Asset 360 (SQL Server)
+-- Script Completo de Criação de Tabelas - IT Asset 360 (SQL Server)
+-- Execute este script no seu banco de dados SQL Server (ex: ITAsset360)
 
--- Tabela de Usuários
+-- 1. Tabelas Auxiliares (Sem dependências)
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SystemSettings')
+CREATE TABLE SystemSettings (
+    Id INT PRIMARY KEY IDENTITY(1,1), -- Único registro
+    AppName NVARCHAR(100),
+    Cnpj NVARCHAR(20),
+    LogoUrl NVARCHAR(MAX),
+    TermTemplate NVARCHAR(MAX) -- HTML do termo
+);
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SystemUsers')
+CREATE TABLE SystemUsers (
+    Id NVARCHAR(50) PRIMARY KEY,
+    Name NVARCHAR(100) NOT NULL,
+    Email NVARCHAR(100) NOT NULL,
+    Password NVARCHAR(100) NOT NULL, -- Em prod, idealmente hash
+    Role NVARCHAR(20) NOT NULL, -- 'ADMIN' ou 'OPERATOR'
+    AvatarUrl NVARCHAR(MAX)
+);
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Sectors')
+CREATE TABLE Sectors (
+    Id NVARCHAR(50) PRIMARY KEY,
+    Name NVARCHAR(100) NOT NULL
+);
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AssetTypes')
+CREATE TABLE AssetTypes (
+    Id NVARCHAR(50) PRIMARY KEY,
+    Name NVARCHAR(100) NOT NULL -- Notebook, Smartphone, etc.
+);
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Brands')
+CREATE TABLE Brands (
+    Id NVARCHAR(50) PRIMARY KEY,
+    Name NVARCHAR(100) NOT NULL -- Dell, Apple, Samsung
+);
+
+-- 2. Tabelas com Dependência Simples
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Models')
+CREATE TABLE Models (
+    Id NVARCHAR(50) PRIMARY KEY,
+    Name NVARCHAR(100) NOT NULL,
+    BrandId NVARCHAR(50),
+    TypeId NVARCHAR(50),
+    ImageUrl NVARCHAR(MAX),
+    CONSTRAINT FK_Models_Brands FOREIGN KEY (BrandId) REFERENCES Brands(Id),
+    CONSTRAINT FK_Models_AssetTypes FOREIGN KEY (TypeId) REFERENCES AssetTypes(Id)
+);
+
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Users')
-BEGIN
-    CREATE TABLE Users (
-        Id NVARCHAR(50) PRIMARY KEY,
-        FullName NVARCHAR(100) NOT NULL,
-        Cpf NVARCHAR(20) NOT NULL,
-        Rg NVARCHAR(20),
-        Pis NVARCHAR(20),
-        Address NVARCHAR(255),
-        Email NVARCHAR(100) NOT NULL,
-        Sector NVARCHAR(50), -- Vendas, Administrativo, TI, etc.
-        JobTitle NVARCHAR(100),
-        Active BIT DEFAULT 1
-    );
-END
-GO
+CREATE TABLE Users (
+    Id NVARCHAR(50) PRIMARY KEY,
+    FullName NVARCHAR(100) NOT NULL,
+    Cpf NVARCHAR(20),
+    Rg NVARCHAR(20),
+    Pis NVARCHAR(20),
+    Address NVARCHAR(255),
+    Email NVARCHAR(100) NOT NULL,
+    SectorId NVARCHAR(50),
+    JobTitle NVARCHAR(100),
+    Active BIT DEFAULT 1,
+    CONSTRAINT FK_Users_Sectors FOREIGN KEY (SectorId) REFERENCES Sectors(Id)
+);
 
--- Tabela de Dispositivos
-IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Devices')
-BEGIN
-    CREATE TABLE Devices (
-        Id NVARCHAR(50) PRIMARY KEY,
-        Name NVARCHAR(100) NOT NULL,
-        Type NVARCHAR(50) NOT NULL, -- Notebook, Smartphone, etc.
-        Brand NVARCHAR(50),
-        Model NVARCHAR(50),
-        SerialNumber NVARCHAR(50),
-        AssetTag NVARCHAR(50), -- Patrimônio
-        PurchaseDate DATE,
-        Status NVARCHAR(50) NOT NULL, -- Disponível, Em Uso, Manutenção
-        CurrentUserId NVARCHAR(50) NULL,
-        CONSTRAINT FK_Devices_Users FOREIGN KEY (CurrentUserId) REFERENCES Users(Id)
-    );
-END
-GO
-
--- Tabela de Chips/SIMs
+-- 3. Tabelas Principais (Ativos)
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SimCards')
-BEGIN
-    CREATE TABLE SimCards (
-        Id NVARCHAR(50) PRIMARY KEY,
-        PhoneNumber NVARCHAR(50) NOT NULL,
-        Operator NVARCHAR(50),
-        Iccid NVARCHAR(50),
-        PlanDetails NVARCHAR(100),
-        Status NVARCHAR(50) NOT NULL,
-        CurrentUserId NVARCHAR(50) NULL,
-        CONSTRAINT FK_SimCards_Users FOREIGN KEY (CurrentUserId) REFERENCES Users(Id)
-    );
-END
-GO
+CREATE TABLE SimCards (
+    Id NVARCHAR(50) PRIMARY KEY,
+    PhoneNumber NVARCHAR(50) NOT NULL,
+    Operator NVARCHAR(50),
+    Iccid NVARCHAR(50),
+    PlanDetails NVARCHAR(100),
+    Status NVARCHAR(50) NOT NULL,
+    CurrentUserId NVARCHAR(50) NULL,
+    CONSTRAINT FK_SimCards_Users FOREIGN KEY (CurrentUserId) REFERENCES Users(Id)
+);
 
--- Tabela de Auditoria (Logs)
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Devices')
+CREATE TABLE Devices (
+    Id NVARCHAR(50) PRIMARY KEY,
+    ModelId NVARCHAR(50),
+    SerialNumber NVARCHAR(50),
+    AssetTag NVARCHAR(50), -- Patrimônio / Hostname
+    Imei NVARCHAR(50),     -- Para Celulares
+    PulsusId NVARCHAR(50), -- ID MDM
+    
+    Status NVARCHAR(50) NOT NULL,
+    CurrentUserId NVARCHAR(50) NULL,
+    
+    SectorId NVARCHAR(50), -- Localização do ativo
+    CostCenter NVARCHAR(50),
+    
+    LinkedSimId NVARCHAR(50) NULL, -- Vínculo com Chip
+
+    -- Financeiro
+    PurchaseDate DATE,
+    PurchaseCost DECIMAL(18, 2),
+    InvoiceNumber NVARCHAR(50),
+    Supplier NVARCHAR(100),
+    PurchaseInvoiceUrl NVARCHAR(MAX),
+
+    CONSTRAINT FK_Devices_Models FOREIGN KEY (ModelId) REFERENCES Models(Id),
+    CONSTRAINT FK_Devices_Users FOREIGN KEY (CurrentUserId) REFERENCES Users(Id),
+    CONSTRAINT FK_Devices_Sectors FOREIGN KEY (SectorId) REFERENCES Sectors(Id),
+    CONSTRAINT FK_Devices_SimCards FOREIGN KEY (LinkedSimId) REFERENCES SimCards(Id)
+);
+
+-- 4. Tabelas de Histórico e Processos
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'MaintenanceRecords')
+CREATE TABLE MaintenanceRecords (
+    Id NVARCHAR(50) PRIMARY KEY,
+    DeviceId NVARCHAR(50) NOT NULL,
+    Type NVARCHAR(50), -- Preventiva, Corretiva
+    Date DATETIME2,
+    Description NVARCHAR(MAX),
+    Cost DECIMAL(18, 2),
+    Provider NVARCHAR(100),
+    InvoiceUrl NVARCHAR(MAX),
+    CONSTRAINT FK_Maintenance_Devices FOREIGN KEY (DeviceId) REFERENCES Devices(Id) ON DELETE CASCADE
+);
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Terms')
+CREATE TABLE Terms (
+    Id NVARCHAR(50) PRIMARY KEY,
+    UserId NVARCHAR(50) NOT NULL,
+    Type NVARCHAR(20), -- ENTREGA ou DEVOLUCAO
+    AssetDetails NVARCHAR(255),
+    Date DATETIME2,
+    FileUrl NVARCHAR(MAX), -- Link para o arquivo gerado/assinado
+    CONSTRAINT FK_Terms_Users FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+);
+
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AuditLogs')
-BEGIN
-    CREATE TABLE AuditLogs (
-        Id NVARCHAR(50) PRIMARY KEY,
-        AssetId NVARCHAR(50) NOT NULL,
-        AssetType NVARCHAR(20) NOT NULL, -- 'Device' ou 'Sim'
-        UserId NVARCHAR(50) NULL, -- Usuário envolvido na ação
-        Action NVARCHAR(50) NOT NULL, -- Entrega, Devolução, Manutenção
-        Timestamp DATETIME2 DEFAULT GETDATE(),
-        Notes NVARCHAR(MAX),
-        AdminUser NVARCHAR(100), -- Quem realizou a operação no sistema
-        CONSTRAINT FK_AuditLogs_Users FOREIGN KEY (UserId) REFERENCES Users(Id)
-    );
-END
-GO
+CREATE TABLE AuditLogs (
+    Id NVARCHAR(50) PRIMARY KEY,
+    AssetId NVARCHAR(50),
+    AssetType NVARCHAR(50), -- Device, Sim, User, System
+    TargetName NVARCHAR(100),
+    Action NVARCHAR(50), -- CREATE, UPDATE, CHECKOUT, CHECKIN
+    Timestamp DATETIME2 DEFAULT GETDATE(),
+    Notes NVARCHAR(MAX),
+    AdminUser NVARCHAR(100) -- Quem realizou a ação
+);
+
+-- Inserção de Dados Iniciais (Opcional - Para não começar vazio)
+IF NOT EXISTS (SELECT * FROM SystemSettings)
+INSERT INTO SystemSettings (AppName, LogoUrl) VALUES ('IT Asset 360', '');
+
+IF NOT EXISTS (SELECT * FROM SystemUsers)
+INSERT INTO SystemUsers (Id, Name, Email, Password, Role) VALUES ('admin1', 'Administrador', 'admin@empresa.com', 'admin', 'ADMIN');

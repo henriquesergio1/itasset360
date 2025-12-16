@@ -3,13 +3,9 @@ import { MockDataProvider } from './MockDataProvider';
 import { ProdDataProvider } from './ProdDataProvider';
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // CONFIGURAÇÃO DE SEGURANÇA:
-  // Se você não tem o backend rodando (Node.js/Python) na porta 5000, 
-  // manter 'prod' vai quebrar o app com "Failed to fetch".
-  
-  // Para forçar o conserto, estamos ignorando o localStorage temporariamente.
-  // const appMode = localStorage.getItem('app_mode') || 'mock';
-  const appMode: string = 'mock'; 
+  // Lê a configuração do navegador. Se não existir, padrão é 'mock'.
+  // Use o Painel Admin > Geral > Fonte de Dados para alternar.
+  const appMode = localStorage.getItem('app_mode') || 'mock';
 
   console.log(`[ITAsset360] Running in ${appMode.toUpperCase()} mode.`);
 
