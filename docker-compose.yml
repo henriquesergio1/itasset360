@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: Dockerfile.api.txt
     ports:
-      - "5000:5000"
+      - "5001:5000" # Mapeia porta 5001 do host para 5000 do container
     environment:
       - DB_SERVER=10.10.10.100
       - DB_PORT=1433
@@ -30,8 +30,8 @@ services:
     ports:
       - "8083:80"
     environment:
-      # O navegador do usuário (Client Side) acessa a API via localhost:5000
-      - REACT_APP_API_URL=http://localhost:5000/api
+      # O navegador acessa via porta 5001 agora
+      - REACT_APP_API_URL=http://localhost:5001/api
     depends_on:
       - api
     networks:

@@ -47,6 +47,11 @@ async function query(command) {
 
 // --- ROUTES ---
 
+// Health Check
+app.get('/', (req, res) => {
+    res.send({ status: 'ok', service: 'IT Asset 360 API', port: PORT });
+});
+
 // 1. Devices
 app.get('/api/devices', async (req, res) => {
     try {

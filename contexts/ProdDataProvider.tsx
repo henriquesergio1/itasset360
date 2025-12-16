@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { DataContext, DataContextType } from './DataContext';
 import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term } from '../types';
 
-// API Configuration
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// API Configuration - Padrão alterado para 5001
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
 export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -27,6 +27,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Initial Data Fetch
   useEffect(() => {
     const fetchData = async () => {
+      console.log(`[ITAsset360] Conectando API em: ${API_URL}`);
       try {
         setLoading(true);
         // Execute fetches safely
@@ -48,7 +49,10 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           fetch(`${API_URL}/terms`)
         ]);
 
-        if (!devicesRes.ok) throw new Error('Falha ao carregar dados da API');
+        if (!devicesRes.ok) {
+           const text = await devicesRes.text();
+           throw new Error(`API Error ${devicesRes.status}: ${text}`);
+        }
 
         // Process Users and Terms safely
         const fetchedUsers: User[] = await usersRes.json();
@@ -80,8 +84,8 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setTerms(fetchedTerms);
         
       } catch (err: any) {
-        console.error("API Error:", err);
-        setError(err.message);
+        console.error("API Connection Failed. Certifique-se que o backend está rodando na porta 5001.", err);
+        setError(`Erro de Conexão: ${err.message}. Verifique se a API (Backend) está rodando.`);
       } finally {
         setLoading(false);
       }
