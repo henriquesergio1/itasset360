@@ -19,7 +19,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [assetTypes, setAssetTypes] = useState<AssetType[]>([]);
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
   const [sectors, setSectors] = useState<UserSector[]>([]);
-  const [terms, setTerms] = useState<Term[]>([]); // Estado local para termos
+  const [terms, setTerms] = useState<Term[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,15 +44,16 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           fetch(`${API_URL}/asset-types`),
           fetch(`${API_URL}/maintenances`),
           fetch(`${API_URL}/sectors`),
-          fetch(`${API_URL}/terms`) // Fetch terms explicitly
+          fetch(`${API_URL}/terms`)
         ]);
 
         if (!devicesRes.ok) throw new Error('Falha ao carregar dados da API');
 
         const fetchedUsers: User[] = await usersRes.json();
-        const fetchedTerms: Term[] = await termsRes.ok ? await termsRes.json() : [];
+        // Correction: Check .ok property before awaiting json
+        const fetchedTerms: Term[] = termsRes.ok ? await termsRes.json() : [];
 
-        // Map terms into users structure to maintain Frontend compatibility
+        // Map terms into users structure
         const usersWithTerms = fetchedUsers.map(u => ({
             ...u,
             terms: fetchedTerms.filter(t => t.userId === u.id)
@@ -187,10 +188,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const assignAsset = async (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string, termFile?: File) => {
-    // Nota: O backend deve lidar com a criação do registro na tabela 'Terms' se um arquivo for enviado ou gerado.
     const payload = { assetId, assetType, userId, notes, action: 'CHECKOUT', _adminUser: adminName };
-    
-    // Se houver arquivo, a lógica seria diferente (FormData), mas mantendo simples para o exemplo SQL:
     await postData('operations/checkout', payload);
     window.location.reload(); 
   };
@@ -205,7 +203,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return logs.filter(l => l.assetId === assetId);
   };
 
-  // --- New CRUD Implementations (Models, Brands, etc) ---
+  // --- New CRUD Implementations ---
 
   const addModel = async (model: DeviceModel, adminName: string) => {
       const saved = await postData('models', { ...model, _adminUser: adminName });
@@ -247,7 +245,6 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setMaintenances(prev => prev.filter(m => m.id !== id));
   };
 
-  // Sectors
   const addSector = async (sector: UserSector, adminName: string) => {
       const saved = await postData('sectors', { ...sector, _adminUser: adminName });
       setSectors(prev => [...prev, saved]);
