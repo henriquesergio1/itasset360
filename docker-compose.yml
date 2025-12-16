@@ -16,11 +16,11 @@ services:
       - REACT_APP_API_URL=http://localhost:5000/api
       
       # Configuração do SQL Server Externo (Para uso do Backend)
-      - DB_SERVER=192.168.1.XXX  # IP ou Host do Servidor SQL na rede
+      - DB_SERVER=10.10.10.100  # IP ou Host do Servidor SQL na rede
       - DB_PORT=1433
       - DB_DATABASE=ITAsset360
-      - DB_USER=seu_usuario
-      - DB_PASSWORD=sua_senha
+      - DB_USER=sa
+      - DB_PASSWORD=#41nhAsa#@@2
     networks:
       - it-asset-net
 

@@ -1,13 +1,131 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
+import { useAuth } from '../contexts/AuthContext';
 import { DeviceStatus, Device, SimCard } from '../types';
-import { ArrowRightLeft, CheckCircle, Smartphone, User as UserIcon } from 'lucide-react';
+import { ArrowRightLeft, CheckCircle, Smartphone, User as UserIcon, FileText, Printer, Search, ChevronDown, X } from 'lucide-react';
+import { generateAndPrintTerm } from '../utils/termGenerator';
 
 type OperationType = 'CHECKOUT' | 'CHECKIN';
 type AssetType = 'Device' | 'Sim';
 
+// --- Componente Interno: Dropdown Pesquisável ---
+interface Option {
+    value: string;
+    label: string;
+    subLabel?: string;
+}
+
+interface SearchableDropdownProps {
+    options: Option[];
+    value: string;
+    onChange: (val: string) => void;
+    placeholder: string;
+    icon?: React.ReactNode;
+    disabled?: boolean;
+}
+
+const SearchableDropdown: React.FC<SearchableDropdownProps> = ({ options, value, onChange, placeholder, icon, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Fechar ao clicar fora
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // Focar no input ao abrir
+    useEffect(() => {
+        if (isOpen && inputRef.current) {
+            inputRef.current.focus();
+        }
+    }, [isOpen]);
+
+    const filteredOptions = options.filter(opt => 
+        opt.label.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (opt.subLabel && opt.subLabel.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+
+    const selectedOption = options.find(o => o.value === value);
+
+    return (
+        <div className="relative" ref={wrapperRef}>
+            <div 
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                className={`w-full p-3 border rounded-lg flex items-center justify-between cursor-pointer bg-white transition-all
+                    ${disabled ? 'bg-gray-100 cursor-not-allowed text-gray-400' : 'hover:border-blue-400'}
+                    ${isOpen ? 'ring-2 ring-blue-100 border-blue-500' : 'border-gray-300'}
+                `}
+            >
+                <div className="flex items-center gap-3 overflow-hidden">
+                    {icon && <span className="text-gray-400 shrink-0">{icon}</span>}
+                    <div className="flex flex-col truncate">
+                         {selectedOption ? (
+                             <>
+                                <span className="text-gray-900 font-medium truncate">{selectedOption.label}</span>
+                                {selectedOption.subLabel && <span className="text-xs text-gray-500 truncate">{selectedOption.subLabel}</span>}
+                             </>
+                         ) : (
+                             <span className="text-gray-500">{placeholder}</span>
+                         )}
+                    </div>
+                </div>
+                <ChevronDown size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </div>
+
+            {isOpen && !disabled && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden flex flex-col animate-fade-in">
+                    <div className="p-2 border-b border-gray-100 bg-gray-50 flex items-center gap-2 sticky top-0">
+                        <Search size={14} className="text-gray-400 ml-2" />
+                        <input 
+                            ref={inputRef}
+                            type="text" 
+                            className="flex-1 bg-transparent outline-none text-sm text-gray-700 placeholder-gray-400"
+                            placeholder="Digite para filtrar..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        {searchTerm && <button onClick={() => setSearchTerm('')}><X size={14} className="text-gray-400 hover:text-gray-600"/></button>}
+                    </div>
+                    <div className="overflow-y-auto flex-1">
+                        {filteredOptions.length > 0 ? (
+                            filteredOptions.map(opt => (
+                                <div 
+                                    key={opt.value}
+                                    onClick={() => {
+                                        onChange(opt.value);
+                                        setIsOpen(false);
+                                        setSearchTerm('');
+                                    }}
+                                    className={`px-4 py-3 cursor-pointer hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0
+                                        ${value === opt.value ? 'bg-blue-50' : ''}
+                                    `}
+                                >
+                                    <div className="font-medium text-gray-800 text-sm">{opt.label}</div>
+                                    {opt.subLabel && <div className="text-xs text-gray-500">{opt.subLabel}</div>}
+                                </div>
+                            ))
+                        ) : (
+                            <div className="p-4 text-center text-sm text-gray-400">Nenhum resultado encontrado.</div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
 const Operations = () => {
-  const { devices, sims, users, assignAsset, returnAsset } = useData();
+  const { devices, sims, users, assignAsset, returnAsset, models, brands, assetTypes, settings, sectors } = useData();
+  const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<OperationType>('CHECKOUT');
   const [assetType, setAssetType] = useState<AssetType>('Device');
   
@@ -15,7 +133,16 @@ const Operations = () => {
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
   const [notes, setNotes] = useState('');
+  const [termFile, setTermFile] = useState<File | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
+  
+  // State for last operation to enable printing
+  const [lastOperation, setLastOperation] = useState<{
+      userId: string;
+      assetId: string;
+      assetType: AssetType;
+      action: OperationType;
+  } | null>(null);
 
   // Filtering for Select Options
   const availableDevices = devices.filter(d => d.status === DeviceStatus.AVAILABLE);
@@ -24,20 +151,121 @@ const Operations = () => {
   const availableSims = sims.filter(s => s.status === DeviceStatus.AVAILABLE);
   const inUseSims = sims.filter(s => s.status === DeviceStatus.IN_USE);
 
+  // --- Prepare Options for Dropdowns ---
+  
+  const assetOptions: Option[] = activeTab === 'CHECKOUT' 
+    ? (assetType === 'Device' 
+        ? availableDevices.map(d => ({
+            value: d.id,
+            label: `${models.find(m => m.id === d.modelId)?.name || 'Desconhecido'} - ${d.assetTag}`,
+            subLabel: `SN: ${d.serialNumber} ${d.imei ? `| IMEI: ${d.imei}` : ''}`
+          })) 
+        : availableSims.map(s => ({
+            value: s.id,
+            label: `${s.phoneNumber} - ${s.operator}`,
+            subLabel: `ICCID: ${s.iccid}`
+          }))
+      )
+    : (assetType === 'Device' 
+        ? inUseDevices.map(d => ({
+            value: d.id,
+            label: `${models.find(m => m.id === d.modelId)?.name || 'Desconhecido'} - ${d.assetTag}`,
+            subLabel: `Com: ${users.find(u => u.id === d.currentUserId)?.fullName || 'Desconhecido'}`
+          })) 
+        : inUseSims.map(s => ({
+            value: s.id,
+            label: `${s.phoneNumber} - ${s.operator}`,
+            subLabel: `Com: ${users.find(u => u.id === s.currentUserId)?.fullName || 'Desconhecido'}`
+          }))
+      );
+
+  const userOptions: Option[] = users.filter(u => u.active).map(u => {
+      const s = sectors.find(sec => sec.id === u.sectorId);
+      return {
+          value: u.id,
+          label: u.fullName,
+          subLabel: `${s?.name || 'Sem Setor'} | ${u.email}`
+      };
+  });
+
+
   const handleExecute = () => {
+    const adminName = currentUser?.name || 'Unknown';
+    
+    // Store data for printing before clearing inputs
+    let currentUserId = selectedUserId;
+    if (activeTab === 'CHECKIN') {
+        if (assetType === 'Device') {
+            currentUserId = devices.find(d => d.id === selectedAssetId)?.currentUserId || '';
+        } else {
+            currentUserId = sims.find(s => s.id === selectedAssetId)?.currentUserId || '';
+        }
+    }
+
     if (activeTab === 'CHECKOUT') {
-      assignAsset(assetType, selectedAssetId, selectedUserId, notes);
+      assignAsset(assetType, selectedAssetId, selectedUserId, notes, adminName, termFile || undefined);
       setSuccessMsg(`Ativo vinculado com sucesso!`);
     } else {
-      returnAsset(assetType, selectedAssetId, notes);
+      returnAsset(assetType, selectedAssetId, notes, adminName, termFile || undefined);
       setSuccessMsg(`Ativo devolvido com sucesso!`);
     }
+
+    setLastOperation({
+        userId: currentUserId,
+        assetId: selectedAssetId,
+        assetType: assetType,
+        action: activeTab
+    });
 
     // Reset Form
     setSelectedAssetId('');
     setSelectedUserId('');
     setNotes('');
-    setTimeout(() => setSuccessMsg(''), 3000);
+    setTermFile(null);
+    setTimeout(() => setSuccessMsg(''), 5000);
+  };
+
+  const handlePrintLastTerm = () => {
+      if (!lastOperation) return;
+      
+      const user = users.find(u => u.id === lastOperation.userId);
+      const asset = lastOperation.assetType === 'Device' 
+          ? devices.find(d => d.id === lastOperation.assetId) 
+          : sims.find(s => s.id === lastOperation.assetId);
+      
+      if (!user || !asset) {
+          alert('Erro ao recuperar dados para impressão.');
+          return;
+      }
+
+      let model, brand, type;
+      let linkedSim: SimCard | undefined;
+
+      if (lastOperation.assetType === 'Device') {
+          const d = asset as Device;
+          model = models.find(m => m.id === d.modelId);
+          brand = brands.find(b => b.id === model?.brandId);
+          type = assetTypes.find(t => t.id === model?.typeId);
+          
+          // Check for linked SIM
+          if (d.linkedSimId) {
+              linkedSim = sims.find(s => s.id === d.linkedSimId);
+          }
+      }
+
+      const sectorName = sectors.find(s => s.id === user.sectorId)?.name;
+
+      generateAndPrintTerm({
+          user,
+          asset,
+          settings,
+          model,
+          brand,
+          type,
+          actionType: lastOperation.action === 'CHECKOUT' ? 'ENTREGA' : 'DEVOLUCAO',
+          linkedSim,
+          sectorName
+      });
   };
 
   return (
@@ -50,13 +278,13 @@ const Operations = () => {
       {/* Tabs */}
       <div className="flex p-1 bg-gray-200 rounded-lg w-full max-w-md">
         <button 
-          onClick={() => { setActiveTab('CHECKOUT'); setSelectedAssetId(''); setSelectedUserId(''); }}
+          onClick={() => { setActiveTab('CHECKOUT'); setSelectedAssetId(''); setSelectedUserId(''); setLastOperation(null); }}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === 'CHECKOUT' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
         >
           Entrega (Vincular)
         </button>
         <button 
-          onClick={() => { setActiveTab('CHECKIN'); setSelectedAssetId(''); setSelectedUserId(''); }}
+          onClick={() => { setActiveTab('CHECKIN'); setSelectedAssetId(''); setSelectedUserId(''); setLastOperation(null); }}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === 'CHECKIN' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
         >
           Devolução (Retornar)
@@ -69,11 +297,11 @@ const Operations = () => {
           {/* Asset Type Selector */}
           <div className="flex gap-4 mb-6">
             <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer ${assetType === 'Device' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}>
-              <input type="radio" name="atype" checked={assetType === 'Device'} onChange={() => setAssetType('Device')} className="hidden" />
+              <input type="radio" name="atype" checked={assetType === 'Device'} onChange={() => { setAssetType('Device'); setSelectedAssetId(''); }} className="hidden" />
               <Smartphone size={18} /> Dispositivo
             </label>
             <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer ${assetType === 'Sim' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}>
-              <input type="radio" name="atype" checked={assetType === 'Sim'} onChange={() => setAssetType('Sim')} className="hidden" />
+              <input type="radio" name="atype" checked={assetType === 'Sim'} onChange={() => { setAssetType('Sim'); setSelectedAssetId(''); }} className="hidden" />
               <ArrowRightLeft size={18} /> Chip / SIM
             </label>
           </div>
@@ -85,47 +313,37 @@ const Operations = () => {
                 {activeTab === 'CHECKOUT' ? 'Selecione o Ativo Disponível' : 'Selecione o Ativo em Uso'}
               </label>
               
-              <select 
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                value={selectedAssetId}
-                onChange={(e) => setSelectedAssetId(e.target.value)}
-              >
-                <option value="">Selecione...</option>
-                {activeTab === 'CHECKOUT' ? (
-                  assetType === 'Device' ? availableDevices.map(d => (
-                    <option key={d.id} value={d.id}>{d.name} - {d.assetTag}</option>
-                  )) : availableSims.map(s => (
-                    <option key={s.id} value={s.id}>{s.phoneNumber} - {s.operator}</option>
-                  ))
-                ) : (
-                  assetType === 'Device' ? inUseDevices.map(d => (
-                    <option key={d.id} value={d.id}>{d.name} (Com: {users.find(u => u.id === d.currentUserId)?.fullName})</option>
-                  )) : inUseSims.map(s => (
-                    <option key={s.id} value={s.id}>{s.phoneNumber} (Com: {users.find(u => u.id === s.currentUserId)?.fullName})</option>
-                  ))
-                )}
-              </select>
+              <SearchableDropdown 
+                  options={assetOptions}
+                  value={selectedAssetId}
+                  onChange={setSelectedAssetId}
+                  placeholder="Pesquisar Ativo (Tag, Modelo, Chip...)"
+                  icon={assetType === 'Device' ? <Smartphone size={18}/> : <ArrowRightLeft size={18}/>}
+              />
 
               {/* Asset Preview Details */}
               {selectedAssetId && (
-                <div className="p-4 bg-gray-50 rounded-lg text-sm space-y-2 border border-gray-200">
-                  <p className="font-semibold text-gray-700">Detalhes:</p>
+                <div className="p-4 bg-gray-50 rounded-lg text-sm space-y-2 border border-gray-200 animate-fade-in">
+                  <p className="font-semibold text-gray-700 border-b border-gray-200 pb-2 mb-2">Detalhes Selecionados:</p>
                   {assetType === 'Device' ? (() => {
                     const d = devices.find(x => x.id === selectedAssetId);
+                    const m = d ? models.find(mod => mod.id === d.modelId) : null;
                     return d ? (
-                      <>
-                        <p>Modelo: {d.model}</p>
-                        <p>Serial: {d.serialNumber}</p>
-                        <p>Tag: {d.assetTag}</p>
-                      </>
+                      <div className="space-y-1">
+                        <p><span className="text-gray-500">Modelo:</span> <span className="font-medium">{m?.name || 'Desconhecido'}</span></p>
+                        <p><span className="text-gray-500">Serial:</span> {d.serialNumber}</p>
+                        <p><span className="text-gray-500">Tag:</span> {d.assetTag}</p>
+                        {d.imei && <p><span className="text-gray-500">IMEI:</span> {d.imei}</p>}
+                      </div>
                     ) : null;
                   })() : (() => {
                     const s = sims.find(x => x.id === selectedAssetId);
                     return s ? (
-                      <>
-                        <p>Operadora: {s.operator}</p>
-                        <p>ICCID: {s.iccid}</p>
-                      </>
+                      <div className="space-y-1">
+                        <p><span className="text-gray-500">Operadora:</span> <span className="font-medium">{s.operator}</span></p>
+                        <p><span className="text-gray-500">Número:</span> {s.phoneNumber}</p>
+                        <p><span className="text-gray-500">ICCID:</span> {s.iccid}</p>
+                      </div>
                     ) : null;
                   })()}
                 </div>
@@ -137,27 +355,32 @@ const Operations = () => {
               {activeTab === 'CHECKOUT' && (
                 <>
                   <label className="block text-sm font-medium text-gray-700">Selecione o Usuário Destino</label>
-                  <div className="relative">
-                    <UserIcon className="absolute top-3 left-3 text-gray-400 h-5 w-5" />
-                    <select 
-                      className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                      value={selectedUserId}
-                      onChange={(e) => setSelectedUserId(e.target.value)}
-                    >
-                      <option value="">Selecione o colaborador...</option>
-                      {users.filter(u => u.active).map(u => (
-                        <option key={u.id} value={u.id}>{u.fullName} - {u.sector}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <SearchableDropdown 
+                     options={userOptions}
+                     value={selectedUserId}
+                     onChange={setSelectedUserId}
+                     placeholder="Pesquisar Colaborador (Nome, Email...)"
+                     icon={<UserIcon size={18}/>}
+                  />
                 </>
               )}
 
               {activeTab === 'CHECKIN' && selectedAssetId && (
-                 <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-sm">
-                   Devolvendo de: <strong>{users.find(u => u.id === (assetType === 'Device' ? devices.find(d => d.id === selectedAssetId)?.currentUserId : sims.find(s => s.id === selectedAssetId)?.currentUserId))?.fullName}</strong>
+                 <div className="p-4 bg-blue-50 text-blue-800 rounded-lg text-sm border border-blue-100 flex items-center gap-2">
+                   <UserIcon size={16}/>
+                   <span>Devolvendo de: <strong>{users.find(u => u.id === (assetType === 'Device' ? devices.find(d => d.id === selectedAssetId)?.currentUserId : sims.find(s => s.id === selectedAssetId)?.currentUserId))?.fullName}</strong></span>
                  </div>
               )}
+
+              {/* Terms of Responsibility Upload */}
+              <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Termo Assinado (Upload Opcional)</label>
+                  <label className="flex items-center gap-2 p-3 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                      <FileText className="text-gray-400" />
+                      <span className="text-sm text-gray-600">{termFile ? termFile.name : `Anexar Arquivo (PDF/Img)`}</span>
+                      <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => setTermFile(e.target.files?.[0] || null)} />
+                  </label>
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Observações (Opcional)</label>
@@ -173,7 +396,7 @@ const Operations = () => {
               <button 
                 onClick={handleExecute}
                 disabled={!selectedAssetId || (activeTab === 'CHECKOUT' && !selectedUserId)}
-                className={`w-full py-3 rounded-lg font-bold text-white shadow-md transition-all
+                className={`w-full py-3 rounded-lg font-bold text-white shadow-md transition-all flex justify-center items-center gap-2
                   ${!selectedAssetId || (activeTab === 'CHECKOUT' && !selectedUserId) 
                     ? 'bg-gray-300 cursor-not-allowed' 
                     : activeTab === 'CHECKOUT' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'}`}
@@ -182,9 +405,16 @@ const Operations = () => {
               </button>
 
               {successMsg && (
-                <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-lg animate-fade-in">
-                  <CheckCircle size={20} />
-                  <span>{successMsg}</span>
+                <div className="flex flex-col gap-2 bg-green-50 p-3 rounded-lg animate-fade-in border border-green-200">
+                  <div className="flex items-center gap-2 text-green-600">
+                     <CheckCircle size={20} />
+                     <span className="font-bold">{successMsg}</span>
+                  </div>
+                  {lastOperation && (
+                      <button onClick={handlePrintLastTerm} className="text-sm text-blue-700 hover:underline flex items-center gap-1 mt-1 font-medium pl-7">
+                          <Printer size={14}/> Imprimir Termo Automaticamente
+                      </button>
+                  )}
                 </div>
               )}
             </div>

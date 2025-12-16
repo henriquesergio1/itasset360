@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
+import { useAuth } from '../contexts/AuthContext';
 import { SimCard, DeviceStatus } from '../types';
 import { Plus, Search, Edit2, Trash2, Smartphone } from 'lucide-react';
 
 const SimManager = () => {
   const { sims, addSim, updateSim, deleteSim, users } = useData();
+  const { user: currentUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -23,10 +25,12 @@ const SimManager = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const adminName = currentUser?.name || 'Unknown';
+
     if (editingId && formData.id) {
-      updateSim(formData as SimCard);
+      updateSim(formData as SimCard, adminName);
     } else {
-      addSim({ ...formData, id: Math.random().toString(36).substr(2, 9), currentUserId: null } as SimCard);
+      addSim({ ...formData, id: Math.random().toString(36).substr(2, 9), currentUserId: null } as SimCard, adminName);
     }
     setIsModalOpen(false);
   };
@@ -78,7 +82,7 @@ const SimManager = () => {
             </thead>
             <tbody>
               {filteredSims.map((sim) => {
-                const currentUser = users.find(u => u.id === sim.currentUserId);
+                const assignedUser = users.find(u => u.id === sim.currentUserId);
                 return (
                   <tr key={sim.id} className="bg-white border-b hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium text-gray-900">{sim.phoneNumber}</td>
@@ -94,12 +98,12 @@ const SimManager = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      {currentUser ? currentUser.fullName : <span className="text-gray-400">-</span>}
+                      {assignedUser ? assignedUser.fullName : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => handleOpenModal(sim)} className="text-blue-600 hover:bg-blue-50 p-1 rounded"><Edit2 size={16} /></button>
-                        <button onClick={() => deleteSim(sim.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16} /></button>
+                        <button onClick={() => deleteSim(sim.id, currentUser?.name || 'Unknown')} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>

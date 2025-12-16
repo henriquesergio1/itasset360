@@ -1,25 +1,70 @@
 import React, { createContext, useContext } from 'react';
-import { Device, SimCard, User, AuditLog } from '../types';
+import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector } from '../types';
 
 export interface DataContextType {
   devices: Device[];
   sims: SimCard[];
   users: User[];
+  systemUsers: SystemUser[];
   logs: AuditLog[];
+  settings: SystemSettings;
+  
+  // Novos dados
+  models: DeviceModel[];
+  brands: DeviceBrand[];
+  assetTypes: AssetType[];
+  maintenances: MaintenanceRecord[];
+  sectors: UserSector[];
+
   loading?: boolean;
   error?: string | null;
-  addDevice: (device: Device) => void;
-  updateDevice: (device: Device) => void;
-  deleteDevice: (id: string) => void;
-  addSim: (sim: SimCard) => void;
-  updateSim: (sim: SimCard) => void;
-  deleteSim: (id: string) => void;
-  addUser: (user: User) => void;
-  updateUser: (user: User) => void;
-  deleteUser: (id: string) => void;
-  assignAsset: (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string) => void;
-  returnAsset: (assetType: 'Device' | 'Sim', assetId: string, notes: string) => void;
+  
+  // CRUD Dispositivos
+  addDevice: (device: Device, adminName: string) => void;
+  updateDevice: (device: Device, adminName: string) => void;
+  deleteDevice: (id: string, adminName: string) => void;
+  
+  // CRUD Sims
+  addSim: (sim: SimCard, adminName: string) => void;
+  updateSim: (sim: SimCard, adminName: string) => void;
+  deleteSim: (id: string, adminName: string) => void;
+  
+  // CRUD Users
+  addUser: (user: User, adminName: string) => void;
+  updateUser: (user: User, adminName: string) => void;
+  toggleUserActive: (user: User, adminName: string) => void; // Substitui deleteUser
+  
+  // CRUD Sectors
+  addSector: (sector: UserSector, adminName: string) => void;
+  deleteSector: (id: string, adminName: string) => void;
+  
+  // CRUD System Users
+  addSystemUser: (user: SystemUser, adminName: string) => void;
+  updateSystemUser: (user: SystemUser, adminName: string) => void;
+  deleteSystemUser: (id: string, adminName: string) => void;
+
+  // Settings
+  updateSettings: (settings: SystemSettings, adminName: string) => void;
+
+  // Operations
+  assignAsset: (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string, termFile?: File) => void;
+  returnAsset: (assetType: 'Device' | 'Sim', assetId: string, notes: string, adminName: string, termFile?: File) => void;
   getHistory: (assetId: string) => AuditLog[];
+
+  // --- Novos Métodos de Gestão (Configurações) ---
+  addAssetType: (type: AssetType, adminName: string) => void;
+  deleteAssetType: (id: string, adminName: string) => void;
+
+  addBrand: (brand: DeviceBrand, adminName: string) => void;
+  deleteBrand: (id: string, adminName: string) => void;
+
+  addModel: (model: DeviceModel, adminName: string) => void;
+  updateModel: (model: DeviceModel, adminName: string) => void;
+  deleteModel: (id: string, adminName: string) => void;
+
+  // --- Manutenção ---
+  addMaintenance: (record: MaintenanceRecord, adminName: string) => void;
+  deleteMaintenance: (id: string, adminName: string) => void;
 }
 
 export const DataContext = createContext<DataContextType | undefined>(undefined);
