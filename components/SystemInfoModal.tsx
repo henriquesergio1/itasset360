@@ -8,25 +8,24 @@ interface SystemInfoModalProps {
 
 const versions = [
     {
-    version: '1.9.1',
+    version: '1.9.2',
     date: 'Hoje',
+    title: 'Governança & Fluxo de Descarte',
+    changes: [
+      'Implementado o "Soft Delete": O botão excluir agora solicita motivo e move o dispositivo para a aba "Descartado" em vez de removê-lo.',
+      'Segurança de Auditoria: Ativos na aba "Descartado" tornam-se somente leitura (read-only), impedindo edições posteriores.',
+      'Melhorada a interface do modal de edição para indicar claramente quando um item está bloqueado por descarte.',
+      'Ações em Massa: Opção "Excluir" convertida para "Descartar Lote" com registro de motivo em massa.'
+    ]
+  },
+    {
+    version: '1.9.1',
+    date: '26/01/2025',
     title: 'Edição em Massa Multi-Campos',
     changes: [
       'Restaurada funcionalidade completa de Atualização em Massa para Dispositivos: edite Status, Modelo, Setor ou Centro de Custo de uma só vez.',
       'Normalização profunda de Status na importação: Interpreta variações como "disponivel", "em uso", "manutencao" ignorando acentos e caixa alta/baixa.',
-      'Corrigida URL definitiva do MDM Pulsus: https://app.pulsus.mobi/devices/.',
-      'Ativada aba de Status "Descartado" para visualização rápida de ativos obsoletos.',
-      'Melhorada a lógica de seleção de itens ao trocar de abas ou realizar buscas.'
-    ]
-  },
-    {
-    version: '1.9.0',
-    date: '26/01/2025',
-    title: 'Inteligência de Importação & Ciclo de Vida',
-    changes: [
-      'Normalização inteligente de Status no importador.',
-      'Adicionada alteração manual de Status (Manutenção/Descarte) no modal de edição do dispositivo.',
-      'Melhorado o sistema de filtragem por abas de status na listagem de inventário.'
+      'Corrigida URL definitiva do MDM Pulsus: https://app.pulsus.mobi/devices/.'
     ]
   },
   {

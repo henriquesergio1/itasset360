@@ -76,8 +76,13 @@ const DeviceManager = () => {
     const ids = Array.from(selectedDevices);
     
     if (bulkField === 'DELETE') {
-      if (!deleteReason.trim()) return alert('Informe o motivo para a exclusão em massa.');
-      ids.forEach(id => deleteDevice(id, adminName, deleteReason));
+      if (!deleteReason.trim()) return alert('Informe o motivo para mover o lote para descarte.');
+      ids.forEach(id => {
+          const dev = devices.find(d => d.id === id);
+          if (dev) {
+              updateDevice({ ...dev, status: DeviceStatus.RETIRED }, `${adminName} (Massa: ${deleteReason})`);
+          }
+      });
     } else {
       if (!bulkValue && bulkField !== 'COST_CENTER') return alert('Selecione um valor para aplicar.');
       
@@ -119,7 +124,11 @@ const DeviceManager = () => {
 
   const handleOpenModal = (device?: Device, viewOnly: boolean = false) => {
     setActiveTab('GENERAL');
-    setIsViewOnly(viewOnly);
+    
+    // Se o dispositivo estiver descartado, forçamos o modo "View Only"
+    const forcedViewOnly = viewOnly || device?.status === DeviceStatus.RETIRED;
+    setIsViewOnly(forcedViewOnly);
+    
     if (device) {
       setEditingId(device.id);
       setFormData({ ...device, accessories: device.accessories || [], customData: device.customData || {} });
@@ -133,6 +142,11 @@ const DeviceManager = () => {
   };
 
   const handleDeleteClick = (id: string) => {
+      const dev = devices.find(d => d.id === id);
+      if (dev?.status === DeviceStatus.IN_USE) {
+          alert('Não é possível descartar um dispositivo que está "Em Uso". Realize a devolução primeiro.');
+          return;
+      }
       setDeleteTargetId(id);
       setDeleteReason('');
       setIsDeleteModalOpen(true);
@@ -140,17 +154,23 @@ const DeviceManager = () => {
 
   const handleConfirmDelete = () => {
       if (deleteTargetId && deleteReason.trim()) {
-          deleteDevice(deleteTargetId, adminName, deleteReason);
+          const dev = devices.find(d => d.id === deleteTargetId);
+          if (dev) {
+              // Em vez de deleteDevice (que remove do BD), usamos updateDevice para status RETIRED
+              updateDevice({ ...dev, status: DeviceStatus.RETIRED }, `${adminName} (Descarte: ${deleteReason})`);
+          }
           setIsDeleteModalOpen(false);
           setDeleteTargetId(null);
           setDeleteReason('');
       } else {
-          alert('Por favor, informe o motivo da exclusão.');
+          alert('Por favor, informe o motivo do descarte.');
       }
   };
 
   const handleDeviceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewOnly) return;
+    
     if (editingId && formData.id) {
       updateDevice(formData as Device, adminName);
     } else {
@@ -241,9 +261,10 @@ const DeviceManager = () => {
               const user = users.find(u => u.id === d.currentUserId);
               const sec = sectors.find(s => s.id === d.sectorId);
               const isSelected = selectedDevices.has(d.id);
+              const isRetired = d.status === DeviceStatus.RETIRED;
 
               return (
-                <tr key={d.id} className={`border-b transition-colors ${isSelected ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}>
+                <tr key={d.id} className={`border-b transition-colors ${isSelected ? 'bg-blue-50/50' : 'hover:bg-gray-50'} ${isRetired ? 'opacity-70 italic bg-gray-50/50' : ''}`}>
                   <td className="px-6 py-4">
                     <input 
                         type="checkbox" 
@@ -287,8 +308,16 @@ const DeviceManager = () => {
                                 <SmartphoneNfc size={16}/>
                             </a>
                         )}
-                        <button onClick={() => handleOpenModal(d)} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded transition-colors"><Edit2 size={16}/></button>
-                        <button onClick={() => handleDeleteClick(d.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"><Trash2 size={16}/></button>
+                        
+                        {/* Se estiver descartado, mostramos o ícone de Olho (visualizar) e removemos o de lixeira */}
+                        {isRetired ? (
+                            <button onClick={() => handleOpenModal(d, true)} className="text-gray-500 hover:bg-gray-100 p-1.5 rounded transition-colors" title="Visualizar Cadastro"><Eye size={16}/></button>
+                        ) : (
+                            <>
+                                <button onClick={() => handleOpenModal(d)} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded transition-colors" title="Editar"><Edit2 size={16}/></button>
+                                <button onClick={() => handleDeleteClick(d.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors" title="Mover para Descarte"><Trash2 size={16}/></button>
+                            </>
+                        )}
                     </div>
                   </td>
                 </tr>
@@ -319,7 +348,7 @@ const DeviceManager = () => {
                     onClick={() => { setBulkField('DELETE'); setIsBulkModalOpen(true); }}
                     className="flex items-center gap-2 px-3 py-2 hover:bg-red-900/30 rounded-lg transition-colors text-xs font-bold text-red-400"
                   >
-                      <Trash2 size={14}/> Excluir Lote
+                      <Trash2 size={14}/> Descartar Lote
                   </button>
               </div>
 
@@ -337,7 +366,7 @@ const DeviceManager = () => {
           <div className="fixed inset-0 bg-black bg-opacity-60 z-[110] flex items-center justify-center p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
                   <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
-                      <h3 className="font-bold">{bulkField === 'DELETE' ? 'Excluir Lote Selecionado' : 'Atualização em Massa'}</h3>
+                      <h3 className="font-bold">{bulkField === 'DELETE' ? 'Descartar Lote Selecionado' : 'Atualização em Massa'}</h3>
                       <button onClick={() => setIsBulkModalOpen(false)}><X size={20}/></button>
                   </div>
                   <div className="p-6 space-y-4">
@@ -393,14 +422,14 @@ const DeviceManager = () => {
                           <div className="space-y-4">
                               <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-start gap-3 border border-red-100">
                                   <AlertTriangle className="shrink-0 mt-0.5" size={18}/>
-                                  <p className="text-sm font-medium">Atenção: Você está excluindo {selectedDevices.size} ativos permanentemente.</p>
+                                  <p className="text-sm font-medium">Atenção: Você está movendo {selectedDevices.size} ativos para a aba de descarte.</p>
                               </div>
                               <div>
-                                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Motivo da Exclusão (Obrigatório)</label>
+                                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Motivo do Descarte (Obrigatório)</label>
                                   <textarea 
                                       className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-red-500 outline-none" 
                                       rows={3} 
-                                      placeholder="Ex: Renovação de Parque..."
+                                      placeholder="Ex: Renovação de Parque, Equipamentos Danificados..."
                                       value={deleteReason}
                                       onChange={(e) => setDeleteReason(e.target.value)}
                                   ></textarea>
@@ -415,7 +444,7 @@ const DeviceManager = () => {
                               disabled={(bulkField === 'DELETE' && !deleteReason.trim()) || (bulkField !== 'DELETE' && bulkField !== 'COST_CENTER' && !bulkValue)}
                               className={`flex-1 py-2 rounded-lg text-white font-bold transition-all ${(bulkField === 'DELETE' && !deleteReason.trim()) || (bulkField !== 'DELETE' && bulkField !== 'COST_CENTER' && !bulkValue) ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                           >
-                              {bulkField === 'DELETE' ? 'Confirmar Exclusão' : 'Aplicar em Lote'}
+                              {bulkField === 'DELETE' ? 'Confirmar Descarte' : 'Aplicar em Lote'}
                           </button>
                       </div>
                   </div>
@@ -423,7 +452,7 @@ const DeviceManager = () => {
           </div>
       )}
 
-      {/* --- MODAL DE EXCLUSÃO INDIVIDUAL COM MOTIVO --- */}
+      {/* --- MODAL DE EXCLUSÃO (CONVERTIDO PARA DESCARTE) --- */}
       {isDeleteModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
@@ -432,18 +461,18 @@ const DeviceManager = () => {
                           <div className="h-12 w-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-3">
                               <AlertTriangle size={24} />
                           </div>
-                          <h3 className="text-lg font-bold text-gray-900">Excluir Dispositivo?</h3>
+                          <h3 className="text-lg font-bold text-gray-900">Mover para Descarte?</h3>
                           <p className="text-sm text-gray-500 mt-1">
-                              Esta ação removerá o item do inventário. É obrigatório informar o motivo.
+                              O dispositivo deixará de estar disponível para uso. É obrigatório informar o motivo.
                           </p>
                       </div>
                       
                       <div className="mb-4">
-                          <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Motivo da Exclusão</label>
+                          <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Motivo do Descarte</label>
                           <textarea 
                               className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-red-500 outline-none" 
                               rows={3} 
-                              placeholder="Ex: Sucata, Roubo, Extravio..."
+                              placeholder="Ex: Sucata, Roubo, Extravio, Danificado..."
                               value={deleteReason}
                               onChange={(e) => setDeleteReason(e.target.value)}
                           ></textarea>
@@ -456,7 +485,7 @@ const DeviceManager = () => {
                               disabled={!deleteReason.trim()}
                               className={`flex-1 py-2 rounded-lg text-white font-bold transition-colors ${!deleteReason.trim() ? 'bg-gray-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
                           >
-                              Confirmar Exclusão
+                              Confirmar Descarte
                           </button>
                       </div>
                   </div>
@@ -468,7 +497,12 @@ const DeviceManager = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-fade-in">
             <div className="bg-slate-900 px-6 py-4 flex justify-between items-center shrink-0">
-              <h3 className="text-lg font-bold text-white">{editingId ? 'Editar Dispositivo' : 'Novo Dispositivo'}</h3>
+              <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-white">
+                      {isViewOnly ? 'Visualizar Dispositivo (Leitura)' : (editingId ? 'Editar Dispositivo' : 'Novo Dispositivo')}
+                  </h3>
+                  {isViewOnly && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black uppercase">Bloqueado</span>}
+              </div>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white transition-colors"><X size={20}/></button>
             </div>
             
@@ -485,7 +519,7 @@ const DeviceManager = () => {
                   <form id="devForm" onSubmit={handleDeviceSubmit} className="grid grid-cols-2 gap-4">
                      <div className="col-span-2">
                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Modelo do Equipamento</label>
-                         <select required className="w-full border rounded-lg p-2.5 bg-gray-50 focus:bg-white transition-colors" value={formData.modelId} onChange={e => setFormData({...formData, modelId: e.target.value})}>
+                         <select required disabled={isViewOnly} className="w-full border rounded-lg p-2.5 bg-gray-50 focus:bg-white transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed" value={formData.modelId} onChange={e => setFormData({...formData, modelId: e.target.value})}>
                             <option value="">Selecione o modelo...</option>
                             {models.map(m => <option key={m.id} value={m.id}>{m.name} ({brands.find(b => b.id === m.brandId)?.name})</option>)}
                          </select>
@@ -493,21 +527,21 @@ const DeviceManager = () => {
 
                      <div>
                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Status do Ativo</label>
-                        <select className="w-full border rounded-lg p-2 text-sm bg-blue-50 font-bold text-blue-800" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as DeviceStatus})}>
+                        <select disabled={isViewOnly} className="w-full border rounded-lg p-2 text-sm bg-blue-50 font-bold text-blue-800 disabled:bg-gray-100 disabled:text-gray-600" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as DeviceStatus})}>
                             <option value={DeviceStatus.AVAILABLE}>{DeviceStatus.AVAILABLE}</option>
                             <option value={DeviceStatus.IN_USE} disabled>{DeviceStatus.IN_USE}</option>
                             <option value={DeviceStatus.MAINTENANCE}>{DeviceStatus.MAINTENANCE}</option>
                             <option value={DeviceStatus.RETIRED}>{DeviceStatus.RETIRED}</option>
                         </select>
-                        <p className="text-[9px] text-gray-400 mt-1">O status "Em Uso" é alterado automaticamente via Entrega.</p>
+                        <p className="text-[9px] text-gray-400 mt-1">Status "Descartado" bloqueia edições futuras.</p>
                      </div>
 
                      <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3 mt-2">
                          <div className="flex gap-4">
-                             <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'TAG'} onChange={() => setIdType('TAG')} className="text-blue-600"/> Patrimônio</label>
-                             <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'IMEI'} onChange={() => setIdType('IMEI')} className="text-blue-600"/> IMEI (Móvel)</label>
+                             <label className={`flex items-center gap-2 text-sm font-bold cursor-pointer ${isViewOnly ? 'cursor-not-allowed opacity-50' : ''}`}><input type="radio" disabled={isViewOnly} checked={idType === 'TAG'} onChange={() => setIdType('TAG')} className="text-blue-600"/> Patrimônio</label>
+                             <label className={`flex items-center gap-2 text-sm font-bold cursor-pointer ${isViewOnly ? 'cursor-not-allowed opacity-50' : ''}`}><input type="radio" disabled={isViewOnly} checked={idType === 'IMEI'} onChange={() => setIdType('IMEI')} className="text-blue-600"/> IMEI (Móvel)</label>
                          </div>
-                         <input required className="w-full border rounded-lg p-2.5 font-mono text-sm bg-white shadow-sm" placeholder={idType === 'TAG' ? 'TAG-001' : 'IMEI (15 dígitos)'} value={formData.assetTag || ''} onChange={e => setFormData({...formData, assetTag: e.target.value, imei: idType === 'IMEI' ? e.target.value : undefined})} />
+                         <input required disabled={isViewOnly} className="w-full border rounded-lg p-2.5 font-mono text-sm bg-white shadow-sm disabled:bg-gray-100" placeholder={idType === 'TAG' ? 'TAG-001' : 'IMEI (15 dígitos)'} value={formData.assetTag || ''} onChange={e => setFormData({...formData, assetTag: e.target.value, imei: idType === 'IMEI' ? e.target.value : undefined})} />
                      </div>
 
                      {relevantFields.length > 0 && (
@@ -519,7 +553,8 @@ const DeviceManager = () => {
                                 <div key={field.id}>
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">{field.name}</label>
                                     <input 
-                                        className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" 
+                                        disabled={isViewOnly}
+                                        className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100" 
                                         value={formData.customData?.[field.id] || ''} 
                                         onChange={e => updateCustomData(field.id, e.target.value)}
                                         placeholder={`Informe ${field.name}...`}
@@ -529,58 +564,60 @@ const DeviceManager = () => {
                          </div>
                      )}
 
-                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Número de Série</label><input required className="w-full border rounded-lg p-2 text-sm" value={formData.serialNumber || ''} onChange={e => setFormData({...formData, serialNumber: e.target.value})}/></div>
-                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">ID Pulsus (MDM)</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.pulsusId || ''} onChange={e => setFormData({...formData, pulsusId: e.target.value})}/></div>
+                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Número de Série</label><input required disabled={isViewOnly} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100" value={formData.serialNumber || ''} onChange={e => setFormData({...formData, serialNumber: e.target.value})}/></div>
+                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">ID Pulsus (MDM)</label><input disabled={isViewOnly} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100" value={formData.pulsusId || ''} onChange={e => setFormData({...formData, pulsusId: e.target.value})}/></div>
                      <div>
                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Setor Atual do Ativo</label>
-                        <select className="w-full border rounded-lg p-2 text-sm" value={formData.sectorId} onChange={e => setFormData({...formData, sectorId: e.target.value})}>
+                        <select disabled={isViewOnly} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100" value={formData.sectorId} onChange={e => setFormData({...formData, sectorId: e.target.value})}>
                             <option value="">Selecione o setor...</option>
                             {sectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                      </div>
-                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Centro de Custo / Cód Setor</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.costCenter || ''} onChange={e => setFormData({...formData, costCenter: e.target.value})}/></div>
+                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Centro de Custo / Cód Setor</label><input disabled={isViewOnly} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100" value={formData.costCenter || ''} onChange={e => setFormData({...formData, costCenter: e.target.value})}/></div>
                   </form>
                 )}
 
                 {activeTab === 'FINANCIAL' && (
                     <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data da Compra</label><input type="date" className="w-full border rounded-lg p-2 text-sm" value={formData.purchaseDate || ''} onChange={e => setFormData({...formData, purchaseDate: e.target.value})}/></div>
-                        <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor Pago (R$)</label><input type="number" step="0.01" className="w-full border rounded-lg p-2 text-sm" value={formData.purchaseCost || 0} onChange={e => setFormData({...formData, purchaseCost: parseFloat(e.target.value)})}/></div>
-                        <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.supplier || ''} onChange={e => setFormData({...formData, supplier: e.target.value})}/></div>
-                        <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Nota Fiscal (Número)</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.invoiceNumber || ''} onChange={e => setFormData({...formData, invoiceNumber: e.target.value})}/></div>
+                        <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data da Compra</label><input type="date" disabled={isViewOnly} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100" value={formData.purchaseDate || ''} onChange={e => setFormData({...formData, purchaseDate: e.target.value})}/></div>
+                        <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor Pago (R$)</label><input type="number" step="0.01" disabled={isViewOnly} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100" value={formData.purchaseCost || 0} onChange={e => setFormData({...formData, purchaseCost: parseFloat(e.target.value)})}/></div>
+                        <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label><input disabled={isViewOnly} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100" value={formData.supplier || ''} onChange={e => setFormData({...formData, supplier: e.target.value})}/></div>
+                        <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Nota Fiscal (Número)</label><input disabled={isViewOnly} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100" value={formData.invoiceNumber || ''} onChange={e => setFormData({...formData, invoiceNumber: e.target.value})}/></div>
                     </div>
                 )}
 
                 {activeTab === 'MAINTENANCE' && (
                     <div className="space-y-6">
-                        <div className="bg-orange-50 p-5 rounded-xl border border-orange-100">
-                            <h4 className="font-bold text-orange-900 mb-4 flex items-center gap-2"><Wrench size={18}/> Novo Registro de Manutenção</h4>
-                            <div className="grid grid-cols-2 gap-4 mb-4">
-                                <div className="col-span-2">
-                                    <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Descrição do Serviço</label>
-                                    <input className="w-full border rounded-lg p-2 text-sm" placeholder="Ex: Troca de Bateria, Manutenção Preventiva..." value={newMaint.description || ''} onChange={e => setNewMaint({...newMaint, description: e.target.value})}/>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Custo (R$)</label>
-                                    <input type="number" className="w-full border rounded-lg p-2 text-sm" value={newMaint.cost} onChange={e => setNewMaint({...newMaint, cost: parseFloat(e.target.value)})}/>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Prestador</label>
-                                    <input className="w-full border rounded-lg p-2 text-sm" placeholder="Assistência XYZ" value={newMaint.provider || ''} onChange={e => setNewMaint({...newMaint, provider: e.target.value})}/>
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Anexar Nota de Serviço / Comprovante (Opcional)</label>
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 relative">
-                                            <Paperclip className="absolute left-2.5 top-2.5 text-gray-400" size={16}/>
-                                            <input className="w-full border rounded-lg pl-9 p-2 text-sm" placeholder="URL da Nota ou Nome do arquivo" value={newMaint.invoiceUrl || ''} onChange={e => setNewMaint({...newMaint, invoiceUrl: e.target.value})}/>
+                        {!isViewOnly && (
+                            <div className="bg-orange-50 p-5 rounded-xl border border-orange-100">
+                                <h4 className="font-bold text-orange-900 mb-4 flex items-center gap-2"><Wrench size={18}/> Novo Registro de Manutenção</h4>
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                    <div className="col-span-2">
+                                        <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Descrição do Serviço</label>
+                                        <input className="w-full border rounded-lg p-2 text-sm" placeholder="Ex: Troca de Bateria, Manutenção Preventiva..." value={newMaint.description || ''} onChange={e => setNewMaint({...newMaint, description: e.target.value})}/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Custo (R$)</label>
+                                        <input type="number" className="w-full border rounded-lg p-2 text-sm" value={newMaint.cost} onChange={e => setNewMaint({...newMaint, cost: parseFloat(e.target.value)})}/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Prestador</label>
+                                        <input className="w-full border rounded-lg p-2 text-sm" placeholder="Assistência XYZ" value={newMaint.provider || ''} onChange={e => setNewMaint({...newMaint, provider: e.target.value})}/>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Anexar Nota de Serviço / Comprovante (Opcional)</label>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 relative">
+                                                <Paperclip className="absolute left-2.5 top-2.5 text-gray-400" size={16}/>
+                                                <input className="w-full border rounded-lg pl-9 p-2 text-sm" placeholder="URL da Nota ou Nome do arquivo" value={newMaint.invoiceUrl || ''} onChange={e => setNewMaint({...newMaint, invoiceUrl: e.target.value})}/>
+                                            </div>
+                                            <label className="bg-white border rounded-lg px-3 flex items-center cursor-pointer hover:bg-orange-100 transition-colors shadow-sm"><Upload size={16} className="text-orange-600"/><input type="file" className="hidden" onChange={e => setNewMaint({...newMaint, invoiceUrl: e.target.files?.[0]?.name})}/></label>
                                         </div>
-                                        <label className="bg-white border rounded-lg px-3 flex items-center cursor-pointer hover:bg-orange-100 transition-colors shadow-sm"><Upload size={16} className="text-orange-600"/><input type="file" className="hidden" onChange={e => setNewMaint({...newMaint, invoiceUrl: e.target.files?.[0]?.name})}/></label>
                                     </div>
                                 </div>
+                                <button onClick={handleAddMaintenance} className="w-full bg-orange-600 text-white py-3 rounded-xl font-bold hover:bg-orange-700 shadow-lg transition-all">Salvar Manutenção</button>
                             </div>
-                            <button onClick={handleAddMaintenance} className="w-full bg-orange-600 text-white py-3 rounded-xl font-bold hover:bg-orange-700 shadow-lg transition-all">Salvar Manutenção</button>
-                        </div>
+                        )}
                         <div className="space-y-3">
                             <h5 className="text-xs font-bold uppercase text-gray-400 flex items-center gap-1"><History size={14}/> Histórico de Manutenções</h5>
                             {deviceMaintenances.length === 0 && <p className="text-sm text-gray-400 text-center py-4 italic">Nenhuma manutenção registrada.</p>}
@@ -599,7 +636,7 @@ const DeviceManager = () => {
                                             </button>
                                         )}
                                         <div className="font-bold text-gray-700">R$ {m.cost.toFixed(2)}</div>
-                                        <button onClick={() => deleteMaintenance(m.id, adminName)} className="text-red-300 hover:text-red-500"><Trash2 size={16}/></button>
+                                        {!isViewOnly && <button onClick={() => deleteMaintenance(m.id, adminName)} className="text-red-300 hover:text-red-500"><Trash2 size={16}/></button>}
                                     </div>
                                 </div>
                             ))}
@@ -611,7 +648,7 @@ const DeviceManager = () => {
                     <div className="relative border-l-2 border-gray-200 ml-3 space-y-6">
                         {getHistory(editingId || '').map(log => (
                             <div key={log.id} className="relative pl-6">
-                                <div className="absolute -left-[9px] top-1 h-4 w-4 bg-blue-500 rounded-full border-2 border-white shadow-sm"></div>
+                                <div className={`absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-white shadow-sm ${log.action === ActionType.UPDATE && log.notes?.includes('Descarte') ? 'bg-red-500' : 'bg-blue-500'}`}></div>
                                 <div className="text-xs text-gray-400">{new Date(log.timestamp).toLocaleString()}</div>
                                 <div className="font-bold text-gray-800 text-sm">{log.action}</div>
                                 <div className="text-xs text-gray-600">{log.notes}</div>
@@ -624,7 +661,9 @@ const DeviceManager = () => {
 
             <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 shrink-0 border-t">
                 <button onClick={() => setIsModalOpen(false)} className="px-6 py-2 rounded-lg bg-gray-200 font-bold text-gray-700 hover:bg-gray-300">Fechar</button>
-                {['GENERAL', 'FINANCIAL'].includes(activeTab) && <button type="submit" form="devForm" className="px-6 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md">Salvar Alterações</button>}
+                {!isViewOnly && ['GENERAL', 'FINANCIAL'].includes(activeTab) && (
+                    <button type="submit" form="devForm" className="px-6 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md">Salvar Alterações</button>
+                )}
             </div>
           </div>
         </div>
