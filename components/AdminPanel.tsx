@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { SystemUser, SystemRole, ActionType } from '../types';
-import { Shield, Settings, Activity, Trash2, Plus, X, Edit2, Save, Database, Server, FileCode, FileText, Bold, Italic, Heading1, List, Eye, ArrowLeftRight } from 'lucide-react';
+import { Shield, Settings, Activity, Trash2, Plus, X, Edit2, Save, Database, Server, FileCode, FileText, Bold, Italic, Heading1, List, Eye, ArrowLeftRight, UploadCloud } from 'lucide-react';
+import DataImporter from './DataImporter';
 
 const AdminPanel = () => {
   const { systemUsers, addSystemUser, updateSystemUser, deleteSystemUser, settings, updateSettings, logs } = useData();
   const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'USERS' | 'SETTINGS' | 'LOGS' | 'TEMPLATE'>('USERS');
+  const [activeTab, setActiveTab] = useState<'USERS' | 'SETTINGS' | 'LOGS' | 'TEMPLATE' | 'IMPORT'>('USERS');
 
   // User Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -144,6 +145,12 @@ const AdminPanel = () => {
             <Settings size={18} /> Geral
         </button>
         <button 
+            onClick={() => setActiveTab('IMPORT')}
+            className={`flex items-center gap-2 px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'IMPORT' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+            <UploadCloud size={18} /> Importação
+        </button>
+        <button 
             onClick={() => setActiveTab('TEMPLATE')}
             className={`flex items-center gap-2 px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${activeTab === 'TEMPLATE' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
@@ -204,6 +211,11 @@ const AdminPanel = () => {
                 </table>
             </div>
         </div>
+      )}
+
+      {/* --- IMPORT TAB (NEW) --- */}
+      {activeTab === 'IMPORT' && (
+          <DataImporter />
       )}
 
       {/* --- SETTINGS TAB --- */}

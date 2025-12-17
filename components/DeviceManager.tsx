@@ -193,6 +193,17 @@ const DeviceManager = () => {
   const handleDeviceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // --- Validação Manual (Necessária pois o botão pode ser clicado fora do <form> na aba Acessórios) ---
+    if (!formData.modelId) {
+        alert('Por favor, selecione o "Modelo do Equipamento" na aba Geral.');
+        return;
+    }
+    if (!formData.assetTag && !formData.imei) {
+        alert('Por favor, preencha a "Identificação" (Patrimônio ou IMEI) na aba Geral.');
+        return;
+    }
+    // ---------------------------------------------------------------------------------------------------
+
     if (idType === 'IMEI') {
         const currentVal = formData.assetTag || '';
         const numericVal = currentVal.replace(/\D/g, '');
@@ -1059,8 +1070,13 @@ const DeviceManager = () => {
             {/* Modal Footer */}
             <div className="bg-gray-50 px-6 py-4 border-t flex justify-end gap-3 shrink-0">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">Fechar</button>
-                {activeTab === 'GENERAL' && (
-                    <button type="submit" form="deviceForm" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                {['GENERAL', 'ACCESSORIES', 'FINANCIAL'].includes(activeTab) && (
+                    <button 
+                        type={activeTab === 'GENERAL' ? "submit" : "button"} 
+                        form={activeTab === 'GENERAL' ? "deviceForm" : undefined}
+                        onClick={activeTab === 'GENERAL' ? undefined : handleDeviceSubmit}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
                         {editingId ? 'Salvar Alterações' : 'Cadastrar Dispositivo'}
                     </button>
                 )}
