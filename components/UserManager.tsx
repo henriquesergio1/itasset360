@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { User, UserSector, ActionType, Device, SimCard, Term } from '../types';
-import { Plus, Search, Edit2, Trash2, Mail, MapPin, Briefcase, Power, Settings, X, Smartphone, FileText, History, ExternalLink, AlertTriangle, Printer, Link, User as UserIcon, Upload, CheckCircle } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Mail, MapPin, Briefcase, Power, Settings, X, Smartphone, FileText, History, ExternalLink, AlertTriangle, Printer, Link, User as UserIcon, Upload, CheckCircle, Filter, Users, Archive } from 'lucide-react';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
 const UserManager = () => {
@@ -15,6 +15,9 @@ const UserManager = () => {
   
   // UI State
   const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE'); // New State for Tabs
+  const [filterSectorId, setFilterSectorId] = useState(''); // New State for Sector Filter
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSectorModalOpen, setIsSectorModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'DATA' | 'ASSETS' | 'TERMS' | 'LOGS'>('DATA');
@@ -146,24 +149,12 @@ const UserManager = () => {
       const user = users.find(u => u.id === editingId);
       if (!user) return;
 
-      // Create a "Ghost" Asset based on term description for printing purposes
-      // This is a simplification. In a real app we might try to find the original asset ID if stored.
-      // Since Term interface has assetDetails string like "Latitude 5420 (Tag: TI-001)", we pass this.
-      
-      // We pass a dummy object that looks like a Device/Sim just enough for the generator
-      // Actually, termGenerator expects a Device or Sim object. 
-      // We will create a fake object and pass the term description as the 'model name' effectively.
       const ghostAsset: any = {
           assetTag: 'N/A', // Assuming details are in the name
           serialNumber: 'N/A'
       };
 
       const sectorName = sectors.find(s => s.id === user.sectorId)?.name;
-
-      // We modify the generator slightly or we abuse the props.
-      // Better: Update generator to accept manual override OR just pass the string as the Model Name.
-      // Let's pass a mock model.
-      
       const mockModel: any = { name: term.assetDetails }; 
       
       generateAndPrintTerm({
@@ -177,8 +168,6 @@ const UserManager = () => {
   };
 
   const handleAttachFile = (termId: string, file: File) => {
-      // In a real app, upload via API. Here we update local state (Mock or Prod Context handles it).
-      // We'll assume the context handles User updates.
       if (!editingId) return;
       
       const user = users.find(u => u.id === editingId);
@@ -191,11 +180,27 @@ const UserManager = () => {
       updateUser({ ...user, terms: updatedTerms }, adminName);
   };
 
-  const filteredUsers = users.filter(u => 
-    u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.cpf.includes(searchTerm)
-  );
+  // --- FILTER LOGIC ---
+  const filteredUsers = users.filter(u => {
+    // 1. Status Filter (Active vs Inactive)
+    const matchesStatus = viewMode === 'ACTIVE' ? u.active : !u.active;
+    if (!matchesStatus) return false;
+
+    // 2. Sector Filter
+    if (filterSectorId && u.sectorId !== filterSectorId) return false;
+
+    // 3. Search Term
+    const searchLower = searchTerm.toLowerCase();
+    return (
+        u.fullName.toLowerCase().includes(searchLower) || 
+        u.email.toLowerCase().includes(searchLower) ||
+        u.cpf.includes(searchTerm)
+    );
+  });
+
+  // Counts for Tabs
+  const countActive = users.filter(u => u.active).length;
+  const countInactive = users.filter(u => !u.active).length;
 
   // Data for tabs
   const userAssets = editingId ? devices.filter(d => d.currentUserId === editingId) : [];
@@ -220,21 +225,60 @@ const UserManager = () => {
         </div>
       </div>
 
-      <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search className="h-5 w-5 text-gray-400" />
+      {/* --- TABS (ACTIVE vs INACTIVE) --- */}
+      <div className="flex gap-4 border-b border-gray-200">
+          <button 
+            onClick={() => setViewMode('ACTIVE')} 
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${viewMode === 'ACTIVE' ? 'border-emerald-500 text-emerald-700 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+              <Users size={18} /> Ativos 
+              <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full ml-1">{countActive}</span>
+          </button>
+          <button 
+            onClick={() => setViewMode('INACTIVE')} 
+            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${viewMode === 'INACTIVE' ? 'border-gray-500 text-gray-700 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+              <Archive size={18} /> Inativos / Histórico
+              <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full ml-1">{countInactive}</span>
+          </button>
+      </div>
+
+      {/* --- SEARCH & FILTER BAR --- */}
+      <div className="flex flex-col md:flex-row gap-4">
+        {/* Search */}
+        <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+            </div>
+            <input 
+            type="text" 
+            placeholder="Buscar por nome, email ou CPF..." 
+            className="pl-10 w-full border border-gray-300 rounded-lg py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            />
         </div>
-        <input 
-          type="text" 
-          placeholder="Buscar por nome, email ou CPF..." 
-          className="pl-10 w-full sm:w-96 border border-gray-300 rounded-lg py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+
+        {/* Sector Filter */}
+        <div className="relative w-full md:w-64">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Filter className="h-4 w-4 text-gray-500" />
+            </div>
+            <select 
+                className="pl-9 w-full border border-gray-300 rounded-lg py-2 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-gray-700 appearance-none"
+                value={filterSectorId}
+                onChange={(e) => setFilterSectorId(e.target.value)}
+            >
+                <option value="">Todos os Setores</option>
+                {sectors.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+            </select>
+        </div>
       </div>
 
       {/* Tabela de Usuários */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left text-gray-500">
             <thead className="text-xs text-gray-700 uppercase bg-gray-50">
@@ -253,7 +297,7 @@ const UserManager = () => {
                 const hasPending = user.terms?.some(t => !t.fileUrl);
 
                 return (
-                  <tr key={user.id} className={`border-b hover:bg-gray-50 transition-colors ${!user.active ? 'bg-gray-50 opacity-75' : 'bg-white'}`}>
+                  <tr key={user.id} className={`border-b hover:bg-gray-50 transition-colors ${!user.active ? 'bg-gray-50/50' : 'bg-white'}`}>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                          <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 relative ${user.active ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-200 text-gray-500'}`}>
@@ -285,7 +329,7 @@ const UserManager = () => {
                                 <span className="h-2 w-2 rounded-full bg-green-500"></span> Ativo
                             </span>
                         ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-600">
                                 Inativo
                             </span>
                         )}
@@ -310,7 +354,9 @@ const UserManager = () => {
             </tbody>
           </table>
           {filteredUsers.length === 0 && (
-              <div className="p-8 text-center text-gray-400">Nenhum colaborador encontrado.</div>
+              <div className="p-8 text-center text-gray-400">
+                  {searchTerm || filterSectorId ? 'Nenhum colaborador encontrado com os filtros atuais.' : 'Nenhum colaborador nesta lista.'}
+              </div>
           )}
         </div>
       </div>
