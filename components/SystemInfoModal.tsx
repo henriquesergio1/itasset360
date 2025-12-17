@@ -8,8 +8,19 @@ interface SystemInfoModalProps {
 
 const versions = [
     {
+    version: '1.8.2',
+    date: 'Hoje',
+    title: 'Importação Avançada & Gestão de Notas',
+    changes: [
+      'Corrigida importação de campos financeiros (Valor Pago, Fornecedor e Data de Compra).',
+      'Novos campos no importador: ID Pulsus, Setor Ativo e Centro de Custo.',
+      'Suporte a anexo de Notas de Serviço/Recibos em registros de manutenção de dispositivos.',
+      'Aprimorado mapeamento automático de colunas CSV para evitar perda de dados decimais e datas.'
+    ]
+  },
+    {
     version: '1.8.1',
-    date: 'Atual',
+    date: '12/01/2025',
     title: 'Importação Inteligente & Sincronização',
     changes: [
       'Correção na importação CSV: O campo Patrimônio agora é opcional se o IMEI for fornecido (soberania do IMEI para dispositivos móveis).',
