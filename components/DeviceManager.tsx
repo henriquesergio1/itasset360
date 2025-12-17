@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Device, DeviceStatus, MaintenanceRecord, MaintenanceType, ActionType, ReturnChecklist, DeviceAccessory } from '../types';
-import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid } from 'lucide-react';
 import ModelSettings from './ModelSettings';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
@@ -18,6 +18,8 @@ const DeviceManager = () => {
   
   // UI State
   const [searchTerm, setSearchTerm] = useState('');
+  const [viewStatus, setViewStatus] = useState<DeviceStatus | 'ALL'>('ALL'); // New: Status Tab State
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isModelSettingsOpen, setIsModelSettingsOpen] = useState(false);
   const [isQuickOpOpen, setIsQuickOpOpen] = useState(false); // Quick Operation Modal
@@ -81,11 +83,18 @@ const DeviceManager = () => {
     return { model, brand, type };
   };
 
+  // --- FILTER LOGIC ---
   const filteredDevices = devices.filter(d => {
+    // 1. Status Filter (Tabs)
+    if (viewStatus !== 'ALL' && d.status !== viewStatus) return false;
+
+    // 2. Search Filter
     const { model, brand } = getModelDetails(d.modelId);
     const searchString = `${model?.name} ${brand?.name} ${d.assetTag} ${d.imei || ''} ${d.pulsusId || ''}`.toLowerCase();
     return searchString.includes(searchTerm.toLowerCase());
   });
+
+  const countStatus = (status: DeviceStatus) => devices.filter(d => d.status === status).length;
 
   // --- Bulk Selection Handlers ---
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -376,6 +385,53 @@ const DeviceManager = () => {
         </div>
       </div>
 
+      {/* --- STATUS TABS --- */}
+      <div className="flex border-b border-gray-200 overflow-x-auto gap-4 md:gap-0">
+          <button 
+            onClick={() => { setViewStatus('ALL'); setSelectedIds([]); }} 
+            className={`flex items-center gap-2 px-6 py-3 border-b-2 transition-colors whitespace-nowrap font-medium text-sm
+                ${viewStatus === 'ALL' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+              <LayoutGrid size={18} /> Todos <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full ml-1">{devices.length}</span>
+          </button>
+          
+          <button 
+            onClick={() => { setViewStatus(DeviceStatus.AVAILABLE); setSelectedIds([]); }} 
+            className={`flex items-center gap-2 px-6 py-3 border-b-2 transition-colors whitespace-nowrap font-medium text-sm
+                ${viewStatus === DeviceStatus.AVAILABLE ? 'border-green-500 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+              <CheckCircle size={18} className={viewStatus === DeviceStatus.AVAILABLE ? 'text-green-500' : ''}/> Disponíveis 
+              <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full ml-1">{countStatus(DeviceStatus.AVAILABLE)}</span>
+          </button>
+
+          <button 
+            onClick={() => { setViewStatus(DeviceStatus.IN_USE); setSelectedIds([]); }} 
+            className={`flex items-center gap-2 px-6 py-3 border-b-2 transition-colors whitespace-nowrap font-medium text-sm
+                ${viewStatus === DeviceStatus.IN_USE ? 'border-blue-500 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+              <Smartphone size={18} className={viewStatus === DeviceStatus.IN_USE ? 'text-blue-500' : ''}/> Em Uso 
+              <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full ml-1">{countStatus(DeviceStatus.IN_USE)}</span>
+          </button>
+
+          <button 
+            onClick={() => { setViewStatus(DeviceStatus.MAINTENANCE); setSelectedIds([]); }} 
+            className={`flex items-center gap-2 px-6 py-3 border-b-2 transition-colors whitespace-nowrap font-medium text-sm
+                ${viewStatus === DeviceStatus.MAINTENANCE ? 'border-amber-500 text-amber-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+              <Wrench size={18} className={viewStatus === DeviceStatus.MAINTENANCE ? 'text-amber-500' : ''}/> Manutenção 
+              <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full ml-1">{countStatus(DeviceStatus.MAINTENANCE)}</span>
+          </button>
+
+          <button 
+            onClick={() => { setViewStatus(DeviceStatus.RETIRED); setSelectedIds([]); }} 
+            className={`flex items-center gap-2 px-6 py-3 border-b-2 transition-colors whitespace-nowrap font-medium text-sm
+                ${viewStatus === DeviceStatus.RETIRED ? 'border-gray-500 text-gray-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+              <Ban size={18} className={viewStatus === DeviceStatus.RETIRED ? 'text-gray-500' : ''}/> Descartados 
+              <span className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full ml-1">{countStatus(DeviceStatus.RETIRED)}</span>
+          </button>
+      </div>
+
       {/* Search Bar */}
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -423,7 +479,7 @@ const DeviceManager = () => {
                 <th className="px-6 py-3">Modelo / Imagem</th>
                 <th className="px-6 py-3">Identificação</th>
                 <th className="px-6 py-3">Localização</th>
-                <th className="px-6 py-3">Status</th>
+                {viewStatus === 'ALL' && <th className="px-6 py-3">Status</th>}
                 <th className="px-6 py-3">Usuário Atual</th>
                 <th className="px-6 py-3 text-right">Ações</th>
               </tr>
@@ -477,14 +533,19 @@ const DeviceManager = () => {
                             {device.costCenter && <div>Cód: {device.costCenter}</div>}
                         </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold 
-                        ${device.status === DeviceStatus.AVAILABLE ? 'bg-green-100 text-green-800' : 
-                          device.status === DeviceStatus.IN_USE ? 'bg-blue-100 text-blue-800' : 
-                          'bg-amber-100 text-amber-800'}`}>
-                        {device.status}
-                      </span>
-                    </td>
+                    
+                    {viewStatus === 'ALL' && (
+                        <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold 
+                            ${device.status === DeviceStatus.AVAILABLE ? 'bg-green-100 text-green-800' : 
+                            device.status === DeviceStatus.IN_USE ? 'bg-blue-100 text-blue-800' : 
+                            device.status === DeviceStatus.MAINTENANCE ? 'bg-amber-100 text-amber-800' :
+                            'bg-gray-200 text-gray-800'}`}>
+                            {device.status}
+                        </span>
+                        </td>
+                    )}
+
                     <td className="px-6 py-4">
                       {assignedUser ? (
                         <div className="flex items-center gap-2">

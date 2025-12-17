@@ -52,19 +52,22 @@ const UserManager = () => {
 
     if (cleanEmail) {
         // Procura usuário com mesmo email, excluindo o usuário atual (em caso de edição)
+        // LÓGICA ATUALIZADA: Só considera conflito se o usuário encontrado estiver ATIVO.
+        // Se estiver inativo (ex: ex-funcionário), o email pode ser reutilizado.
         const emailConflict = users.find(u => 
             u.email.toLowerCase() === cleanEmail && 
-            u.id !== editingId
+            u.id !== editingId &&
+            u.active === true 
         );
 
         if (emailConflict) {
-            alert(`ERRO: O E-mail "${formData.email}" já está cadastrado para o colaborador: ${emailConflict.fullName}.`);
+            alert(`ERRO: O E-mail "${formData.email}" já está em uso pelo colaborador ATIVO: ${emailConflict.fullName}.`);
             return;
         }
     }
 
     if (cleanCpf) {
-        // Procura usuário com mesmo CPF, excluindo o usuário atual
+        // CPF continua único globalmente (uma pessoa física não muda de CPF, mesmo saindo e voltando)
         const cpfConflict = users.find(u => 
             u.cpf === cleanCpf && 
             u.id !== editingId
@@ -96,6 +99,20 @@ const UserManager = () => {
       }
 
       const action = user.active ? 'inativar' : 'ativar';
+      
+      // Validação extra ao reativar: Verificar se o email não foi tomado por outro ativo enquanto este estava inativo
+      if (!user.active) {
+          const emailConflict = users.find(u => 
+              u.email.toLowerCase() === user.email.toLowerCase() && 
+              u.id !== user.id &&
+              u.active === true
+          );
+          if (emailConflict) {
+              alert(`NÃO É POSSÍVEL REATIVAR!\n\nO e-mail "${user.email}" agora pertence ao colaborador ativo: ${emailConflict.fullName}.\n\nEdite o e-mail deste cadastro antes de reativá-lo.`);
+              return;
+          }
+      }
+
       if (window.confirm(`Tem certeza que deseja ${action} o colaborador ${user.fullName}?`)) {
           toggleUserActive(user, adminName);
       }

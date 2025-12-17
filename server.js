@@ -125,7 +125,7 @@ async function logAction(assetId, assetType, action, adminUser, notes) {
             .input('AssetId', sql.NVarChar, assetId)
             .input('AssetType', sql.NVarChar, assetType)
             .input('Action', sql.NVarChar, action)
-            .input('AdminUser', sql.NVarChar, adminUser)
+            .input('AdminUser', sql.NVarChar, adminUser || 'Sistema')
             .input('Notes', sql.NVarChar, notes || '')
             .query(`INSERT INTO AuditLogs (Id, AssetId, AssetType, Action, AdminUser, Notes) VALUES (@Id, @AssetId, @AssetType, @Action, @AdminUser, @Notes)`);
     } catch (e) { console.error('Log Error', e); }
@@ -242,6 +242,7 @@ app.put('/api/devices/:id', async (req, res) => {
             console.error('Accessory sync failed', e);
         }
 
+        await logAction(d.id, 'Device', 'Atualização', d._adminUser, `Atualização de cadastro (Tag: ${d.assetTag})`);
         res.json(d);
     } catch (err) { res.status(500).send(err.message); }
 });
@@ -249,6 +250,8 @@ app.put('/api/devices/:id', async (req, res) => {
 app.delete('/api/devices/:id', async (req, res) => {
     try {
         await query(`DELETE FROM Devices WHERE Id = '${req.params.id}'`);
+        // Note: AdminUser is hard to get on DELETE without body, setting as 'System' or via query param if implemented.
+        await logAction(req.params.id, 'Device', 'Exclusão', 'Sistema', 'Dispositivo removido'); 
         res.json({ success: true });
     } catch (err) { res.status(500).send(err.message); }
 });
@@ -279,9 +282,28 @@ app.post('/api/sims', async (req, res) => {
     } catch (err) { res.status(500).send(err.message); }
 });
 
+app.put('/api/sims/:id', async (req, res) => {
+    const s = req.body;
+    try {
+        const pool = await sql.connect(dbConfig);
+        await pool.request()
+            .input('Id', sql.NVarChar, req.params.id)
+            .input('PhoneNumber', sql.NVarChar, s.phoneNumber)
+            .input('Operator', sql.NVarChar, s.operator)
+            .input('Iccid', sql.NVarChar, s.iccid)
+            .input('PlanDetails', sql.NVarChar, s.planDetails)
+            .input('Status', sql.NVarChar, s.status)
+            .query(`UPDATE SimCards SET PhoneNumber=@PhoneNumber, Operator=@Operator, Iccid=@Iccid, PlanDetails=@PlanDetails, Status=@Status WHERE Id=@Id`);
+        
+        await logAction(s.id, 'Sim', 'Atualização', s._adminUser, s.phoneNumber);
+        res.json(s);
+    } catch (err) { res.status(500).send(err.message); }
+});
+
 app.delete('/api/sims/:id', async (req, res) => {
     try {
         await query(`DELETE FROM SimCards WHERE Id = '${req.params.id}'`);
+        await logAction(req.params.id, 'Sim', 'Exclusão', 'Sistema', 'Chip removido');
         res.json({ success: true });
     } catch (err) { res.status(500).send(err.message); }
 });
@@ -323,10 +345,24 @@ app.put('/api/users/:id', async (req, res) => {
             .input('Id', sql.NVarChar, req.params.id)
             .input('FullName', sql.NVarChar, u.fullName)
             .input('Email', sql.NVarChar, u.email)
+            .input('SectorId', sql.NVarChar, u.sectorId)
+            .input('JobTitle', sql.NVarChar, u.jobTitle)
             .input('Active', sql.Bit, u.active ? 1 : 0)
             .input('HasPendingIssues', sql.Bit, u.hasPendingIssues ? 1 : 0)
             .input('PendingIssuesNote', sql.NVarChar, u.pendingIssuesNote || '')
-            .query(`UPDATE Users SET FullName=@FullName, Email=@Email, Active=@Active, HasPendingIssues=@HasPendingIssues, PendingIssuesNote=@PendingIssuesNote WHERE Id=@Id`);
+            .query(`UPDATE Users SET FullName=@FullName, Email=@Email, SectorId=@SectorId, JobTitle=@JobTitle, Active=@Active, HasPendingIssues=@HasPendingIssues, PendingIssuesNote=@PendingIssuesNote WHERE Id=@Id`);
+        
+        // Log Logic for User Updates (Includes Activation/Inactivation)
+        let logActionType = 'Atualização';
+        let logNotes = `Dados atualizados`;
+        
+        // Detect Status Change intent (heuristic based on active prop being present)
+        if (u.active !== undefined) {
+            logNotes += `. Status: ${u.active ? 'Ativo' : 'Inativo'}`;
+            // If it was a pure toggle, we could check DB, but here we just log the new state.
+        }
+        
+        await logAction(u.id, 'User', logActionType, u._adminUser, logNotes);
         res.json(u);
     } catch (err) { res.status(500).send(err.message); }
 });
