@@ -1,3 +1,5 @@
+
+// ... existing imports
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -5,7 +7,7 @@ import { User, UserSector, ActionType, Device, SimCard, Term } from '../types';
 import { Plus, Search, Edit2, Trash2, Mail, MapPin, Briefcase, Power, Settings, X, Smartphone, FileText, History, ExternalLink, AlertTriangle, Printer, Link, User as UserIcon, Upload, CheckCircle, Filter, Users, Archive, Tag } from 'lucide-react';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
-// --- VALIDAÇÕES ---
+// ... (Existing validation functions - isValidCPF, etc) ...
 const isValidCPF = (cpf: string) => {
     cpf = cpf.replace(/[^\d]+/g, '');
     if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
@@ -24,9 +26,7 @@ const isValidCPF = (cpf: string) => {
 
 const isValidPIS = (pis: string) => {
     pis = pis.replace(/[^\d]+/g, '');
-    if (pis.length !== 11) return false; // PIS deve ter 11 dígitos
-    
-    // Algoritmo PIS/PASEP
+    if (pis.length !== 11) return false; 
     const weights = [3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
     let sum = 0;
     for (let i = 0; i < 10; i++) {
@@ -49,13 +49,19 @@ const UserManager = () => {
   
   // UI State
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE'); // New State for Tabs
-  const [filterSectorId, setFilterSectorId] = useState(''); // New State for Sector Filter
+  const [viewMode, setViewMode] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE'); 
+  const [filterSectorId, setFilterSectorId] = useState(''); 
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isViewOnly, setIsViewOnly] = useState(false); // New: View Only Mode
+  const [isViewOnly, setIsViewOnly] = useState(false); 
   const [isSectorModalOpen, setIsSectorModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'DATA' | 'ASSETS' | 'TERMS' | 'LOGS'>('DATA');
+
+  // Inactivate Modal State
+  const [isInactivateModalOpen, setIsInactivateModalOpen] = useState(false);
+  const [inactivateTarget, setInactivateTarget] = useState<User | null>(null);
+  const [inactivateReasonType, setInactivateReasonType] = useState('Demissão / Desligamento');
+  const [inactivateReasonText, setInactivateReasonText] = useState('');
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<User>>({ active: true });
@@ -84,7 +90,6 @@ const UserManager = () => {
     e.preventDefault();
     if (isViewOnly) return;
 
-    // --- VALIDAÇÕES DE CAMPOS ---
     if (!formData.sectorId) {
         alert('ERRO: O campo "Cargo / Função" é obrigatório. Por favor, selecione uma opção.');
         return;
@@ -104,13 +109,9 @@ const UserManager = () => {
         }
     }
 
-    // --- VALIDAÇÃO DE UNICIDADE (CPF E EMAIL) ---
     const cleanEmail = formData.email?.trim().toLowerCase();
 
     if (cleanEmail) {
-        // Procura usuário com mesmo email, excluindo o usuário atual (em caso de edição)
-        // LÓGICA ATUALIZADA: Só considera conflito se o usuário encontrado estiver ATIVO.
-        // Se estiver inativo (ex: ex-funcionário), o email pode ser reutilizado.
         const emailConflict = users.find(u => 
             u.email.toLowerCase() === cleanEmail && 
             u.id !== editingId &&
@@ -124,8 +125,6 @@ const UserManager = () => {
     }
 
     if (cleanCpf) {
-        // CPF continua único globalmente (uma pessoa física não muda de CPF, mesmo saindo e voltando)
-        // Comparar apenas os números
         const cpfConflict = users.find(u => 
             u.cpf.replace(/[^\d]+/g, '') === cleanCpf && 
             u.id !== editingId
@@ -136,7 +135,6 @@ const UserManager = () => {
             return;
         }
     }
-    // ---------------------------------------------
 
     if (editingId && formData.id) {
       updateUser(formData as User, adminName);
@@ -146,19 +144,8 @@ const UserManager = () => {
     setIsModalOpen(false);
   };
 
-  const handleToggleActive = (user: User) => {
-      // Check for assigned assets
-      const assignedDevices = devices.filter(d => d.currentUserId === user.id);
-      const assignedSims = sims.filter(s => s.currentUserId === user.id);
-      
-      if (user.active && (assignedDevices.length > 0 || assignedSims.length > 0)) {
-          alert(`NÃO É POSSÍVEL INATIVAR!\n\nO colaborador ${user.fullName} possui ${assignedDevices.length} dispositivo(s) e ${assignedSims.length} chip(s) vinculados.\n\nRealize a devolução dos equipamentos antes de inativar o cadastro.`);
-          return;
-      }
-
-      const action = user.active ? 'inativar' : 'ativar';
-      
-      // Validação extra ao reativar: Verificar se o email não foi tomado por outro ativo enquanto este estava inativo
+  const handleToggleClick = (user: User) => {
+      // Re-Activation
       if (!user.active) {
           const emailConflict = users.find(u => 
               u.email.toLowerCase() === user.email.toLowerCase() && 
@@ -169,11 +156,43 @@ const UserManager = () => {
               alert(`NÃO É POSSÍVEL REATIVAR!\n\nO e-mail "${user.email}" agora pertence ao colaborador ativo: ${emailConflict.fullName}.\n\nEdite o e-mail deste cadastro antes de reativá-lo.`);
               return;
           }
+          if (window.confirm(`Deseja reativar o colaborador ${user.fullName}?`)) {
+              toggleUserActive(user, adminName, 'Reativação Manual');
+          }
+          return;
       }
 
-      if (window.confirm(`Tem certeza que deseja ${action} o colaborador ${user.fullName}?`)) {
-          toggleUserActive(user, adminName);
+      // Inactivation Logic
+      const assignedDevices = devices.filter(d => d.currentUserId === user.id);
+      const assignedSims = sims.filter(s => s.currentUserId === user.id);
+      
+      if (assignedDevices.length > 0 || assignedSims.length > 0) {
+          alert(`NÃO É POSSÍVEL INATIVAR!\n\nO colaborador ${user.fullName} possui ${assignedDevices.length} dispositivo(s) e ${assignedSims.length} chip(s) vinculados.\n\nRealize a devolução dos equipamentos antes de inativar o cadastro.`);
+          return;
       }
+
+      // Open Modal
+      setInactivateTarget(user);
+      setInactivateReasonType('Demissão / Desligamento');
+      setInactivateReasonText('');
+      setIsInactivateModalOpen(true);
+  };
+
+  const confirmInactivation = () => {
+      if (!inactivateTarget) return;
+      
+      let finalReason = inactivateReasonType;
+      if (inactivateReasonType === 'Outros') {
+          if (!inactivateReasonText.trim()) {
+              alert('Por favor, descreva o motivo.');
+              return;
+          }
+          finalReason = inactivateReasonText;
+      }
+
+      toggleUserActive(inactivateTarget, adminName, finalReason);
+      setIsInactivateModalOpen(false);
+      setInactivateTarget(null);
   };
 
   const handleAddSector = () => {
@@ -212,20 +231,19 @@ const UserManager = () => {
           model,
           brand,
           type: assetType,
-          actionType: 'ENTREGA', // Re-issuing implies printing the delivery term
+          actionType: 'ENTREGA', 
           linkedSim,
           sectorName
       });
   };
 
-  // Logic to reprint a historic term based on minimal data
   const handleReprintHistoricTerm = (term: Term) => {
       if (!editingId) return;
       const user = users.find(u => u.id === editingId);
       if (!user) return;
 
       const ghostAsset: any = {
-          assetTag: 'N/A', // Assuming details are in the name
+          assetTag: 'N/A', 
           serialNumber: 'N/A'
       };
 
@@ -425,7 +443,7 @@ const UserManager = () => {
                                  <Edit2 size={16} />
                              </button>
                              <button 
-                                onClick={() => handleToggleActive(user)} 
+                                onClick={() => handleToggleClick(user)} 
                                 className={`p-1 rounded transition-colors ${user.active ? 'text-gray-400 hover:text-red-500 hover:bg-red-50' : 'text-green-500 hover:bg-green-50'}`} 
                                 title={user.active ? 'Inativar Usuário' : 'Reativar Usuário'}
                              >
@@ -446,8 +464,65 @@ const UserManager = () => {
         </div>
       </div>
 
-      {/* User Modal */}
+      {/* --- INACTIVATE MODAL --- */}
+      {isInactivateModalOpen && inactivateTarget && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
+                  <div className="p-6">
+                      <div className="flex flex-col items-center text-center mb-4">
+                          <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 mb-3">
+                              <Archive size={24} />
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Inativar Colaborador?</h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                              {inactivateTarget.fullName} será inativado. Informe o motivo.
+                          </p>
+                      </div>
+                      
+                      <div className="space-y-4 mb-4">
+                          <div>
+                              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Motivo da Inativação</label>
+                              <select 
+                                  className="w-full border rounded-lg p-2 text-sm bg-white"
+                                  value={inactivateReasonType}
+                                  onChange={(e) => setInactivateReasonType(e.target.value)}
+                              >
+                                  <option value="Demissão / Desligamento">Demissão / Desligamento</option>
+                                  <option value="Outros">Outros</option>
+                              </select>
+                          </div>
+
+                          {inactivateReasonType === 'Outros' && (
+                              <div className="animate-fade-in">
+                                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Descreva o Motivo</label>
+                                  <textarea 
+                                      className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-gray-500 outline-none" 
+                                      rows={3} 
+                                      placeholder="Ex: Licença prolongada, transferência..."
+                                      value={inactivateReasonText}
+                                      onChange={(e) => setInactivateReasonText(e.target.value)}
+                                  ></textarea>
+                              </div>
+                          )}
+                      </div>
+
+                      <div className="flex gap-3">
+                          <button onClick={() => setIsInactivateModalOpen(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">Cancelar</button>
+                          <button 
+                              onClick={confirmInactivation} 
+                              className="flex-1 py-2 rounded-lg text-white font-bold transition-colors bg-red-600 hover:bg-red-700"
+                          >
+                              Confirmar
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* User Modal (Same as before) */}
       {isModalOpen && (
+        // ... (Modal Content - No changes needed inside)
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="bg-slate-900 px-6 py-4 flex justify-between items-center shrink-0">

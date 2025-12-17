@@ -1,16 +1,22 @@
+
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { SimCard, DeviceStatus } from '../types';
-import { Plus, Search, Edit2, Trash2, Smartphone } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Smartphone, AlertTriangle } from 'lucide-react';
 
 const SimManager = () => {
   const { sims, addSim, updateSim, deleteSim, users } = useData();
   const { user: currentUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
   const [formData, setFormData] = useState<Partial<SimCard>>({ status: DeviceStatus.AVAILABLE });
+
+  const adminName = currentUser?.name || 'Unknown';
 
   const handleOpenModal = (sim?: SimCard) => {
     if (sim) {
@@ -25,14 +31,29 @@ const SimManager = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const adminName = currentUser?.name || 'Unknown';
-
     if (editingId && formData.id) {
       updateSim(formData as SimCard, adminName);
     } else {
       addSim({ ...formData, id: Math.random().toString(36).substr(2, 9), currentUserId: null } as SimCard, adminName);
     }
     setIsModalOpen(false);
+  };
+
+  const handleDeleteClick = (id: string) => {
+      setDeleteTargetId(id);
+      setDeleteReason('');
+      setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+      if (deleteTargetId && deleteReason.trim()) {
+          deleteSim(deleteTargetId, adminName, deleteReason);
+          setIsDeleteModalOpen(false);
+          setDeleteTargetId(null);
+          setDeleteReason('');
+      } else {
+          alert('Por favor, informe o motivo da exclusão.');
+      }
   };
 
   const filteredSims = sims.filter(s => 
@@ -103,7 +124,7 @@ const SimManager = () => {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => handleOpenModal(sim)} className="text-blue-600 hover:bg-blue-50 p-1 rounded"><Edit2 size={16} /></button>
-                        <button onClick={() => deleteSim(sim.id, currentUser?.name || 'Unknown')} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16} /></button>
+                        <button onClick={() => handleDeleteClick(sim.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>
@@ -114,7 +135,48 @@ const SimManager = () => {
         </div>
       </div>
 
-       {/* Modal */}
+       {/* Delete Modal */}
+       {isDeleteModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
+                  <div className="p-6">
+                      <div className="flex flex-col items-center text-center mb-4">
+                          <div className="h-12 w-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-3">
+                              <AlertTriangle size={24} />
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Excluir Chip/SIM?</h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                              Esta ação removerá o item do inventário. É obrigatório informar o motivo.
+                          </p>
+                      </div>
+                      
+                      <div className="mb-4">
+                          <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Motivo da Exclusão</label>
+                          <textarea 
+                              className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none" 
+                              rows={3} 
+                              placeholder="Ex: Cancelamento de linha, perda, defeito..."
+                              value={deleteReason}
+                              onChange={(e) => setDeleteReason(e.target.value)}
+                          ></textarea>
+                      </div>
+
+                      <div className="flex gap-3">
+                          <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">Cancelar</button>
+                          <button 
+                              onClick={handleConfirmDelete} 
+                              disabled={!deleteReason.trim()}
+                              className={`flex-1 py-2 rounded-lg text-white font-bold transition-colors ${!deleteReason.trim() ? 'bg-gray-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+                          >
+                              Confirmar Exclusão
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+       {/* Edit Modal */}
        {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">

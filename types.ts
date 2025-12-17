@@ -1,3 +1,4 @@
+
 export enum DeviceStatus {
   AVAILABLE = 'Disponível',
   IN_USE = 'Em Uso',
@@ -150,6 +151,7 @@ export enum ActionType {
   create = 'Criação',
   UPDATE = 'Atualização',
   DELETE = 'Exclusão',
+  RESTORE = 'Restauração', // Novo tipo
   CHECKOUT = 'Entrega',
   CHECKIN = 'Devolução',
   MAINTENANCE_START = 'Envio Manutenção',
@@ -168,6 +170,7 @@ export interface AuditLog {
   timestamp: string;
   notes?: string;
   adminUser: string;
+  backupData?: string; // JSON string do item excluído para restauração
 }
 
 export interface DashboardStats {

@@ -1,8 +1,10 @@
+
+// ... existing imports
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Device, DeviceStatus, MaintenanceRecord, MaintenanceType, ActionType, ReturnChecklist, DeviceAccessory } from '../types';
-import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid, Eye } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid, Eye, AlertTriangle } from 'lucide-react';
 import ModelSettings from './ModelSettings';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
@@ -18,19 +20,23 @@ const DeviceManager = () => {
   
   // UI State
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewStatus, setViewStatus] = useState<DeviceStatus | 'ALL'>('ALL'); // New: Status Tab State
+  const [viewStatus, setViewStatus] = useState<DeviceStatus | 'ALL'>('ALL'); 
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isViewOnly, setIsViewOnly] = useState(false); // New: View Only Mode
+  const [isViewOnly, setIsViewOnly] = useState(false); 
   const [isModelSettingsOpen, setIsModelSettingsOpen] = useState(false);
-  const [isQuickOpOpen, setIsQuickOpOpen] = useState(false); // Quick Operation Modal
-  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false); // Bulk Edit Modal
+  const [isQuickOpOpen, setIsQuickOpOpen] = useState(false); 
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false); 
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false); // NEW
   
   // Selection State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
   // Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null); // NEW
+  const [deleteReason, setDeleteReason] = useState(''); // NEW
+  
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'ACCESSORIES' | 'FINANCIAL' | 'MAINTENANCE' | 'HISTORY'>('GENERAL');
   
   // Form State
@@ -45,8 +51,8 @@ const DeviceManager = () => {
       sectorId: string;
       status: string;
       costCenter: string;
-      accessories: string[]; // List of AccessoryType IDs
-      applyAccessories: boolean; // Checkbox to confirm accessory overwrite
+      accessories: string[]; 
+      applyAccessories: boolean; 
   }>({
       modelId: '',
       sectorId: '',
@@ -97,7 +103,25 @@ const DeviceManager = () => {
 
   const countStatus = (status: DeviceStatus) => devices.filter(d => d.status === status).length;
 
-  // --- Bulk Selection Handlers ---
+  // --- HANDLERS ---
+
+  const handleDeleteClick = (id: string) => {
+      setDeleteTargetId(id);
+      setDeleteReason('');
+      setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+      if (deleteTargetId && deleteReason.trim()) {
+          deleteDevice(deleteTargetId, adminName, deleteReason);
+          setIsDeleteModalOpen(false);
+          setDeleteTargetId(null);
+          setDeleteReason('');
+      } else {
+          alert('Por favor, informe o motivo da exclusão.');
+      }
+  };
+
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.checked) {
           setSelectedIds(filteredDevices.map(d => d.id));
@@ -204,9 +228,8 @@ const DeviceManager = () => {
 
   const handleDeviceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isViewOnly) return; // Guard clause
+    if (isViewOnly) return; 
     
-    // --- Validação Manual (Necessária pois o botão pode ser clicado fora do <form> na aba Acessórios) ---
     if (!formData.modelId) {
         alert('Por favor, selecione o "Modelo do Equipamento" na aba Geral.');
         return;
@@ -215,7 +238,6 @@ const DeviceManager = () => {
         alert('Por favor, preencha a "Identificação" (Patrimônio ou IMEI) na aba Geral.');
         return;
     }
-    // ---------------------------------------------------------------------------------------------------
 
     if (idType === 'IMEI') {
         const currentVal = formData.assetTag || '';
@@ -253,7 +275,6 @@ const DeviceManager = () => {
       setFormData({ ...formData, assetTag: val });
   };
 
-  // --- Accessory Management in Form ---
   const handleAddAccessory = () => {
       if (isViewOnly) return;
       if (!selectedAccType) return;
@@ -298,7 +319,6 @@ const DeviceManager = () => {
     setNewMaint({ type: MaintenanceType.CORRECTIVE, cost: 0, description: '', provider: '' });
   };
 
-  // --- Quick Operation Handlers ---
   const handleOpenQuickOp = (device: Device, type: 'CHECKOUT' | 'CHECKIN') => {
       setQuickOpDevice(device);
       setQuickOpType(type);
@@ -306,7 +326,6 @@ const DeviceManager = () => {
       setQuickOpNotes('');
       setLastOpSuccess(false);
       
-      // Init Checklist for Checkin (Dynamic based on accessories)
       if (type === 'CHECKIN') {
           const initialChecklist: ReturnChecklist = {
               'Equipamento Principal': true
@@ -335,7 +354,6 @@ const DeviceManager = () => {
           }
           assignAsset('Device', quickOpDevice.id, quickOpUser, quickOpNotes, adminName);
       } else {
-          // Checkin - Pass checklist to identify missing items
           returnAsset('Device', quickOpDevice.id, quickOpNotes, adminName, undefined, checklist);
       }
       
@@ -607,7 +625,7 @@ const DeviceManager = () => {
                             </a>
                         )}
                         <button onClick={() => handleOpenModal(device)} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors" title="Editar"><Edit2 size={16} /></button>
-                        <button onClick={() => deleteDevice(device.id, adminName)} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Excluir"><Trash2 size={16} /></button>
+                        <button onClick={() => handleDeleteClick(device.id)} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Excluir"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>
@@ -621,10 +639,51 @@ const DeviceManager = () => {
         </div>
       </div>
 
+      {/* === DELETE CONFIRMATION MODAL === */}
+      {isDeleteModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
+                  <div className="p-6">
+                      <div className="flex flex-col items-center text-center mb-4">
+                          <div className="h-12 w-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-3">
+                              <AlertTriangle size={24} />
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900">Excluir Dispositivo?</h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                              Esta ação removerá o item do inventário. É obrigatório informar o motivo.
+                          </p>
+                      </div>
+                      
+                      <div className="mb-4">
+                          <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Motivo da Exclusão</label>
+                          <textarea 
+                              className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none" 
+                              rows={3} 
+                              placeholder="Ex: Quebra total, venda, furto..."
+                              value={deleteReason}
+                              onChange={(e) => setDeleteReason(e.target.value)}
+                          ></textarea>
+                      </div>
+
+                      <div className="flex gap-3">
+                          <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">Cancelar</button>
+                          <button 
+                              onClick={handleConfirmDelete} 
+                              disabled={!deleteReason.trim()}
+                              className={`flex-1 py-2 rounded-lg text-white font-bold transition-colors ${!deleteReason.trim() ? 'bg-gray-300 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+                          >
+                              Confirmar Exclusão
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* === BULK EDIT MODAL === */}
       {isBulkEditOpen && (
+          // ... (Existing Bulk Edit Modal Code - No changes needed)
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-              {/* ... (Existing Bulk Edit Modal) ... */}
               <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in">
                   <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
                       <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -722,8 +781,8 @@ const DeviceManager = () => {
 
       {/* === QUICK OPERATION MODAL === */}
       {isQuickOpOpen && quickOpDevice && (
+          // ... (Existing Quick Op Modal Code - No changes needed)
           <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
-              {/* ... (Existing Quick Op Modal) ... */}
               <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in">
                   <div className={`px-6 py-4 flex justify-between items-center ${quickOpType === 'CHECKOUT' ? 'bg-blue-600' : 'bg-orange-600'}`}>
                       <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -842,6 +901,7 @@ const DeviceManager = () => {
 
       {/* === MAIN DEVICE MODAL (EXISTING) === */}
       {isModalOpen && (
+        // ... (Existing Main Modal Code - No changes needed)
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
             
@@ -866,7 +926,7 @@ const DeviceManager = () => {
             </div>
             
             <div className="flex-1 overflow-y-auto p-6">
-                
+                {/* ... (Existing Tabs Content) ... */}
                 {/* --- TAB: GENERAL --- */}
                 {activeTab === 'GENERAL' && (
                     <form id="deviceForm" onSubmit={handleDeviceSubmit} className="space-y-4">

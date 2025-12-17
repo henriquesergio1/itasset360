@@ -73,7 +73,9 @@ async function runMigrations(pool) {
         { table: 'Users', col: 'HasPendingIssues', type: 'BIT' },
         { table: 'Users', col: 'PendingIssuesNote', type: 'NVARCHAR(MAX)' },
         // Tabela SystemSettings
-        { table: 'SystemSettings', col: 'ReturnTermTemplate', type: 'NVARCHAR(MAX)' }
+        { table: 'SystemSettings', col: 'ReturnTermTemplate', type: 'NVARCHAR(MAX)' },
+        // Tabela AuditLogs
+        { table: 'AuditLogs', col: 'BackupData', type: 'NVARCHAR(MAX)' }
     ];
 
     for (const item of missingColumns) {
@@ -118,7 +120,7 @@ async function query(command) {
 }
 
 // --- HELPER LOG ---
-async function logAction(assetId, assetType, action, adminUser, notes) {
+async function logAction(assetId, assetType, action, adminUser, notes, backupData = null) {
     try {
         const pool = await sql.connect(dbConfig);
         await pool.request()
@@ -128,7 +130,8 @@ async function logAction(assetId, assetType, action, adminUser, notes) {
             .input('Action', sql.NVarChar, action)
             .input('AdminUser', sql.NVarChar, adminUser || 'Sistema')
             .input('Notes', sql.NVarChar, notes || '')
-            .query(`INSERT INTO AuditLogs (Id, AssetId, AssetType, Action, AdminUser, Notes) VALUES (@Id, @AssetId, @AssetType, @Action, @AdminUser, @Notes)`);
+            .input('BackupData', sql.NVarChar, backupData)
+            .query(`INSERT INTO AuditLogs (Id, AssetId, AssetType, Action, AdminUser, Notes, BackupData) VALUES (@Id, @AssetId, @AssetType, @Action, @AdminUser, @Notes, @BackupData)`);
     } catch (e) { console.error('Log Error', e); }
 }
 
@@ -243,9 +246,17 @@ app.put('/api/devices/:id', async (req, res) => {
 });
 
 app.delete('/api/devices/:id', async (req, res) => {
+    const { _adminUser, reason } = req.body;
     try {
-        await query(`DELETE FROM Devices WHERE Id = '${req.params.id}'`);
-        await logAction(req.params.id, 'Device', 'Exclusão', 'Sistema', 'Dispositivo removido'); 
+        const pool = await sql.connect(dbConfig);
+        // Fetch before delete for backup
+        const toDelete = await pool.request().query(`SELECT * FROM Devices WHERE Id = '${req.params.id}'`);
+        
+        if (toDelete.recordset.length > 0) {
+            const backupJson = JSON.stringify(toDelete.recordset[0]);
+            await query(`DELETE FROM Devices WHERE Id = '${req.params.id}'`);
+            await logAction(req.params.id, 'Device', 'Exclusão', _adminUser || 'Sistema', `Motivo: ${reason || 'Não informado'}`, backupJson); 
+        }
         res.json({ success: true });
     } catch (err) { res.status(500).send(err.message); }
 });
@@ -295,9 +306,16 @@ app.put('/api/sims/:id', async (req, res) => {
 });
 
 app.delete('/api/sims/:id', async (req, res) => {
+    const { _adminUser, reason } = req.body;
     try {
-        await query(`DELETE FROM SimCards WHERE Id = '${req.params.id}'`);
-        await logAction(req.params.id, 'Sim', 'Exclusão', 'Sistema', 'Chip removido');
+        const pool = await sql.connect(dbConfig);
+        const toDelete = await pool.request().query(`SELECT * FROM SimCards WHERE Id = '${req.params.id}'`);
+        
+        if (toDelete.recordset.length > 0) {
+            const backupJson = JSON.stringify(toDelete.recordset[0]);
+            await query(`DELETE FROM SimCards WHERE Id = '${req.params.id}'`);
+            await logAction(req.params.id, 'Sim', 'Exclusão', _adminUser || 'Sistema', `Motivo: ${reason || 'Não informado'}`, backupJson);
+        }
         res.json({ success: true });
     } catch (err) { res.status(500).send(err.message); }
 });
@@ -357,7 +375,7 @@ app.put('/api/users/:id', async (req, res) => {
         if (currentActive !== null && u.active !== undefined) {
             if (!!currentActive !== !!u.active) {
                 logActionType = !!u.active ? 'Ativação' : 'Inativação';
-                logNotes = !!u.active ? 'Colaborador reativado no sistema.' : 'Colaborador inativado.';
+                logNotes = !!u.active ? 'Colaborador reativado no sistema.' : (u._reason ? `Motivo: ${u._reason}` : 'Colaborador inativado.');
             }
         }
         await logAction(u.id, 'User', logActionType, u._adminUser, logNotes);
@@ -426,15 +444,14 @@ app.post('/api/operations/checkin', async (req, res) => {
     } catch (err) { res.status(500).send(err.message); }
 });
 
-// 6. Logs & Settings
+// 6. Logs & Settings & Restore
 app.get('/api/logs', async (req, res) => {
     try {
-        const data = await query(`SELECT Id as id, AssetId as assetId, AssetType as assetType, TargetName as targetName, Action as action, Timestamp as timestamp, Notes as notes, AdminUser as adminUser FROM AuditLogs ORDER BY Timestamp DESC`);
+        const data = await query(`SELECT Id as id, AssetId as assetId, AssetType as assetType, TargetName as targetName, Action as action, Timestamp as timestamp, Notes as notes, AdminUser as adminUser, BackupData as backupData FROM AuditLogs ORDER BY Timestamp DESC`);
         res.json(data);
     } catch (err) { res.status(500).send(err.message); }
 });
 
-// --- NEW ROUTE: CLEAR LOGS ---
 app.delete('/api/logs', async (req, res) => {
     try {
         await query(`TRUNCATE TABLE AuditLogs`);
@@ -442,6 +459,45 @@ app.delete('/api/logs', async (req, res) => {
     } catch (err) { res.status(500).send(err.message); }
 });
 
+app.post('/api/restore', async (req, res) => {
+    const { logId, _adminUser } = req.body;
+    try {
+        const pool = await sql.connect(dbConfig);
+        const logs = await pool.request()
+            .input('Id', sql.NVarChar, logId)
+            .query(`SELECT * FROM AuditLogs WHERE Id=@Id`);
+        
+        if (logs.recordset.length === 0 || !logs.recordset[0].BackupData) {
+            return res.status(400).send('Log inválido ou sem backup.');
+        }
+
+        const log = logs.recordset[0];
+        const data = JSON.parse(log.BackupData);
+
+        if (log.AssetType === 'Device') {
+            await pool.request()
+            .input('Id', sql.NVarChar, data.Id)
+            .input('ModelId', sql.NVarChar, data.ModelId)
+            .input('SerialNumber', sql.NVarChar, data.SerialNumber)
+            .input('AssetTag', sql.NVarChar, data.AssetTag)
+            .input('Status', sql.NVarChar, 'Disponível') // Restore as available
+            .query(`INSERT INTO Devices (Id, ModelId, SerialNumber, AssetTag, Status) VALUES (@Id, @ModelId, @SerialNumber, @AssetTag, @Status)`);
+        } else if (log.AssetType === 'Sim') {
+             await pool.request()
+            .input('Id', sql.NVarChar, data.Id)
+            .input('PhoneNumber', sql.NVarChar, data.PhoneNumber)
+            .input('Status', sql.NVarChar, 'Disponível')
+            .query(`INSERT INTO SimCards (Id, PhoneNumber, Status) VALUES (@Id, @PhoneNumber, @Status)`);
+        } else {
+            return res.status(400).send('Tipo de ativo não suportado para restauração automática.');
+        }
+
+        await logAction(log.AssetId, log.AssetType, 'Restauração', _adminUser, `Item restaurado via auditoria.`);
+        res.json({ success: true });
+    } catch (err) { res.status(500).send(err.message); }
+});
+
+// ... (Other standard CRUD routes remain largely the same, SystemSettings etc) ...
 app.get('/api/settings', async (req, res) => {
     try {
         const data = await query(`SELECT TOP 1 AppName as appName, Cnpj as cnpj, LogoUrl as logoUrl, TermTemplate as termTemplate, ReturnTermTemplate as returnTermTemplate FROM SystemSettings`);
@@ -475,7 +531,8 @@ app.put('/api/settings', async (req, res) => {
     } catch (err) { res.status(500).send(err.message); }
 });
 
-// --- NEW CRUD ROUTES --- (Models, Brands, etc... Same as original)
+// Models, Brands, AssetTypes, etc... (Standard CRUDs)
+// (Mantendo o código existente para brevidade, já que não mudou a lógica core)
 app.get('/api/models', async (req, res) => { try { const data = await query(`SELECT Id as id, Name as name, BrandId as brandId, TypeId as typeId, ImageUrl as imageUrl FROM Models`); res.json(data); } catch (err) { res.status(500).send(err.message); } });
 app.post('/api/models', async (req, res) => { const m = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, m.id).input('Name', sql.NVarChar, m.name).input('BrandId', sql.NVarChar, m.brandId).input('TypeId', sql.NVarChar, m.typeId).input('ImageUrl', sql.NVarChar, m.imageUrl || '').query(`INSERT INTO Models (Id, Name, BrandId, TypeId, ImageUrl) VALUES (@Id, @Name, @BrandId, @TypeId, @ImageUrl)`); await logAction(m.id, 'Model', 'Criação', m._adminUser, m.name); res.json(m); } catch (err) { res.status(500).send(err.message); } });
 app.put('/api/models/:id', async (req, res) => { const m = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, req.params.id).input('Name', sql.NVarChar, m.name).input('BrandId', sql.NVarChar, m.brandId).input('TypeId', sql.NVarChar, m.typeId).input('ImageUrl', sql.NVarChar, m.imageUrl || '').query(`UPDATE Models SET Name=@Name, BrandId=@BrandId, TypeId=@TypeId, ImageUrl=@ImageUrl WHERE Id=@Id`); await logAction(m.id, 'Model', 'Atualização', m._adminUser, m.name); res.json(m); } catch (err) { res.status(500).send(err.message); } });

@@ -50,6 +50,26 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       } catch (e) { console.error('Failed to clear logs', e); }
   };
 
+  const restoreItem = async (logId: string, adminName: string) => {
+      try {
+          const res = await fetch(`${API_URL}/api/restore`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ logId, _adminUser: adminName })
+          });
+          if (res.ok) {
+              alert('Item restaurado com sucesso!');
+              // Refresh all
+              window.location.reload(); 
+          } else {
+              throw new Error('Falha na restauração');
+          }
+      } catch (e: any) {
+          console.error(e);
+          alert('Erro ao restaurar: ' + e.message);
+      }
+  };
+
   // Initial Data Fetch
   useEffect(() => {
     const fetchData = async () => {
@@ -136,9 +156,14 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return safeJson(res);
   };
 
-  // Generic DELETE helper
-  const deleteData = async (endpoint: string, id: string) => {
-    const res = await fetch(`${API_URL}/api/${endpoint}/${id}`, { method: 'DELETE' });
+  // Generic DELETE helper (Updated to include body for reasons)
+  const deleteData = async (endpoint: string, id: string, extraData?: any) => {
+    const options: RequestInit = { method: 'DELETE' };
+    if (extraData) {
+        options.headers = { 'Content-Type': 'application/json' };
+        options.body = JSON.stringify(extraData);
+    }
+    const res = await fetch(`${API_URL}/api/${endpoint}/${id}`, options);
     if (!res.ok) throw new Error('Failed to delete');
   };
 
@@ -157,8 +182,8 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     fetchLogs();
   };
 
-  const deleteDevice = async (id: string, adminName: string) => {
-    await deleteData('devices', id);
+  const deleteDevice = async (id: string, adminName: string, reason: string) => {
+    await deleteData('devices', id, { _adminUser: adminName, reason });
     setDevices(prev => prev.filter(d => d.id !== id));
     fetchLogs();
   };
@@ -175,8 +200,8 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     fetchLogs();
   };
 
-  const deleteSim = async (id: string, adminName: string) => {
-    await deleteData('sims', id);
+  const deleteSim = async (id: string, adminName: string, reason: string) => {
+    await deleteData('sims', id, { _adminUser: adminName, reason });
     setSims(prev => prev.filter(s => s.id !== id));
     fetchLogs();
   };
@@ -193,9 +218,10 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     fetchLogs();
   };
 
-  const toggleUserActive = async (user: User, adminName: string) => {
+  const toggleUserActive = async (user: User, adminName: string, reason?: string) => {
     const updatedUser = { ...user, active: !user.active };
-    await putData('users', { ...updatedUser, _adminUser: adminName });
+    // Pass reason in _extra field if needed, or handle in backend logic
+    await putData('users', { ...updatedUser, _adminUser: adminName, _reason: reason });
     setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
     fetchLogs();
   };
@@ -377,7 +403,8 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addSystemUser, updateSystemUser, deleteSystemUser,
     updateSettings,
     assignAsset, returnAsset, getHistory,
-    clearLogs, // New
+    clearLogs,
+    restoreItem, // New
     addModel, updateModel, deleteModel,
     addBrand, deleteBrand,
     addAssetType, deleteAssetType,

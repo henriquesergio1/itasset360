@@ -24,17 +24,17 @@ export interface DataContextType {
   // CRUD Dispositivos
   addDevice: (device: Device, adminName: string) => void;
   updateDevice: (device: Device, adminName: string) => void;
-  deleteDevice: (id: string, adminName: string) => void;
+  deleteDevice: (id: string, adminName: string, reason: string) => void; // Added reason
   
   // CRUD Sims
   addSim: (sim: SimCard, adminName: string) => void;
   updateSim: (sim: SimCard, adminName: string) => void;
-  deleteSim: (id: string, adminName: string) => void;
+  deleteSim: (id: string, adminName: string, reason: string) => void; // Added reason
   
   // CRUD Users
   addUser: (user: User, adminName: string) => void;
   updateUser: (user: User, adminName: string) => void;
-  toggleUserActive: (user: User, adminName: string) => void; 
+  toggleUserActive: (user: User, adminName: string, reason?: string) => void; // Added reason
   
   // CRUD Sectors
   addSector: (sector: UserSector, adminName: string) => void;
@@ -55,6 +55,7 @@ export interface DataContextType {
   
   // Admin Tools
   clearLogs: () => void;
+  restoreItem: (logId: string, adminName: string) => void; // New
 
   // --- Novos Métodos de Gestão (Configurações) ---
   addAssetType: (type: AssetType, adminName: string) => void;

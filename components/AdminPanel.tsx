@@ -3,12 +3,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { SystemUser, SystemRole, ActionType } from '../types';
-import { Shield, Settings, Activity, Trash2, Plus, X, Edit2, Save, Database, Server, FileCode, FileText, Bold, Italic, Heading1, List, Eye, ArrowLeftRight, UploadCloud, Info, AlertTriangle } from 'lucide-react';
+import { Shield, Settings, Activity, Trash2, Plus, X, Edit2, Save, Database, Server, FileCode, FileText, Bold, Italic, Heading1, List, Eye, ArrowLeftRight, UploadCloud, Info, AlertTriangle, RotateCcw } from 'lucide-react';
 import DataImporter from './DataImporter';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
 const AdminPanel = () => {
-  const { systemUsers, addSystemUser, updateSystemUser, deleteSystemUser, settings, updateSettings, logs, clearLogs } = useData();
+  const { systemUsers, addSystemUser, updateSystemUser, deleteSystemUser, settings, updateSettings, logs, clearLogs, restoreItem } = useData();
   const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'USERS' | 'SETTINGS' | 'LOGS' | 'TEMPLATE' | 'IMPORT'>('USERS');
 
@@ -117,6 +117,12 @@ const AdminPanel = () => {
       if (window.confirm('PERIGO: Esta ação apagará PERMANENTEMENTE todo o histórico de auditoria e movimentações.\n\nDeseja realmente continuar?')) {
           clearLogs();
           alert('Histórico limpo com sucesso.');
+      }
+  };
+
+  const handleRestore = (logId: string) => {
+      if(window.confirm('Deseja restaurar este item excluído?')) {
+          restoreItem(logId, currentUser?.name || 'Admin');
       }
   };
 
@@ -515,6 +521,7 @@ const AdminPanel = () => {
                             <th className="px-6 py-3">Ação</th>
                             <th className="px-6 py-3">Item Afetado</th>
                             <th className="px-6 py-3">Detalhes</th>
+                            <th className="px-6 py-3">Opções</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -526,6 +533,7 @@ const AdminPanel = () => {
                                     <span className={`px-2 py-1 rounded text-xs font-bold 
                                         ${log.action === ActionType.create ? 'bg-green-100 text-green-700' : 
                                           log.action === ActionType.DELETE ? 'bg-red-100 text-red-700' : 
+                                          log.action === ActionType.RESTORE ? 'bg-indigo-100 text-indigo-700' :
                                           log.action === ActionType.UPDATE ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
                                         {log.action}
                                     </span>
@@ -535,6 +543,17 @@ const AdminPanel = () => {
                                     {log.targetName || log.assetId}
                                 </td>
                                 <td className="px-6 py-4 text-gray-500 truncate max-w-xs" title={log.notes}>{log.notes || '-'}</td>
+                                <td className="px-6 py-4">
+                                    {log.action === ActionType.DELETE && log.backupData && (
+                                        <button 
+                                            onClick={() => handleRestore(log.id)}
+                                            className="flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-100 border border-indigo-200"
+                                            title="Restaurar este item excluído"
+                                        >
+                                            <RotateCcw size={12}/> Restaurar
+                                        </button>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </tbody>

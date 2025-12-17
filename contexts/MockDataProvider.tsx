@@ -32,7 +32,8 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     assetId: string, 
     targetName: string, 
     adminName: string, 
-    notes?: string
+    notes?: string,
+    backupData?: string // New Parameter
   ) => {
     const newLog: AuditLog = {
       id: Math.random().toString(36).substr(2, 9),
@@ -42,13 +43,41 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       action,
       timestamp: new Date().toISOString(),
       adminUser: adminName,
-      notes
+      notes,
+      backupData
     };
     setLogs(prev => [newLog, ...prev]);
   };
 
   const clearLogs = () => {
       setLogs([]);
+  };
+
+  const restoreItem = (logId: string, adminName: string) => {
+      const log = logs.find(l => l.id === logId);
+      if (!log || !log.backupData) {
+          alert('Dados de backup não encontrados para este item.');
+          return;
+      }
+
+      try {
+          const data = JSON.parse(log.backupData);
+          
+          if (log.assetType === 'Device') {
+              setDevices(prev => [...prev, data]);
+          } else if (log.assetType === 'Sim') {
+              setSims(prev => [...prev, data]);
+          } else {
+              alert('Restauração automática disponível apenas para Dispositivos e Chips no momento.');
+              return;
+          }
+
+          logAction(ActionType.RESTORE, log.assetType, log.assetId, log.targetName || 'Item Restaurado', adminName, `Restaurado a partir do log de ${new Date(log.timestamp).toLocaleDateString()}`);
+          alert('Item restaurado com sucesso!');
+      } catch (e) {
+          console.error("Erro ao restaurar", e);
+          alert('Erro ao processar dados de backup.');
+      }
   };
 
   // ... (rest of CRUD methods remain same as provided previously - devices, sims, etc) ...
@@ -88,13 +117,16 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     logAction(ActionType.UPDATE, 'Device', device.id, model?.name || 'Unknown', adminName, logNotes || 'Atualização de cadastro');
   };
 
-  const deleteDevice = (id: string, adminName: string) => {
+  const deleteDevice = (id: string, adminName: string, reason: string) => {
     const dev = devices.find(d => d.id === id);
     if (dev?.linkedSimId) {
          setSims(prev => prev.map(s => s.id === dev.linkedSimId ? { ...s, status: DeviceStatus.AVAILABLE, currentUserId: null } : s));
     }
     setDevices(prev => prev.filter(d => d.id !== id));
-    if (dev) logAction(ActionType.DELETE, 'Device', id, 'Dispositivo', adminName);
+    if (dev) {
+        const backup = JSON.stringify(dev);
+        logAction(ActionType.DELETE, 'Device', id, dev.assetTag, adminName, `Motivo: ${reason}`, backup);
+    }
   };
 
   // --- Sims ---
@@ -106,10 +138,13 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSims(prev => prev.map(s => s.id === sim.id ? sim : s));
     logAction(ActionType.UPDATE, 'Sim', sim.id, sim.phoneNumber, adminName);
   };
-  const deleteSim = (id: string, adminName: string) => {
+  const deleteSim = (id: string, adminName: string, reason: string) => {
     const sim = sims.find(s => s.id === id);
     setSims(prev => prev.filter(s => s.id !== id));
-    if (sim) logAction(ActionType.DELETE, 'Sim', id, sim.phoneNumber, adminName);
+    if (sim) {
+        const backup = JSON.stringify(sim);
+        logAction(ActionType.DELETE, 'Sim', id, sim.phoneNumber, adminName, `Motivo: ${reason}`, backup);
+    }
   };
 
   // --- Users ---
@@ -121,10 +156,15 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setUsers(prev => prev.map(u => u.id === user.id ? user : u));
     logAction(ActionType.UPDATE, 'User', user.id, user.fullName, adminName);
   };
-  const toggleUserActive = (user: User, adminName: string) => {
+  const toggleUserActive = (user: User, adminName: string, reason?: string) => {
     const updatedUser = { ...user, active: !user.active };
     setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
-    logAction(updatedUser.active ? ActionType.ACTIVATE : ActionType.INACTIVATE, 'User', user.id, user.fullName, adminName);
+    const action = updatedUser.active ? ActionType.ACTIVATE : ActionType.INACTIVATE;
+    let notes = '';
+    if (action === ActionType.INACTIVATE) {
+        notes = `Motivo: ${reason || 'Não informado'}`;
+    }
+    logAction(action, 'User', user.id, user.fullName, adminName, notes);
   };
 
   // --- Sectors ---
@@ -307,7 +347,8 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addSystemUser, updateSystemUser, deleteSystemUser,
     updateSettings,
     assignAsset, returnAsset, getHistory,
-    clearLogs, // New
+    clearLogs,
+    restoreItem, // New
     addAssetType, deleteAssetType,
     addBrand, deleteBrand,
     addModel, updateModel, deleteModel,
