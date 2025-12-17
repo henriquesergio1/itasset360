@@ -8,24 +8,24 @@ interface SystemInfoModalProps {
 
 const versions = [
     {
-    version: '1.9.2',
+    version: '1.9.3',
     date: 'Hoje',
-    title: 'Governança & Fluxo de Descarte',
+    title: 'Restauração de Operações Diretas',
     changes: [
-      'Implementado o "Soft Delete": O botão excluir agora solicita motivo e move o dispositivo para a aba "Descartado" em vez de removê-lo.',
-      'Segurança de Auditoria: Ativos na aba "Descartado" tornam-se somente leitura (read-only), impedindo edições posteriores.',
-      'Melhorada a interface do modal de edição para indicar claramente quando um item está bloqueado por descarte.',
-      'Ações em Massa: Opção "Excluir" convertida para "Descartar Lote" com registro de motivo em massa.'
+      'Restaurados os botões de Entrega e Devolução diretamente na linha de cada dispositivo.',
+      'Modais de operação integrados: Faça a Entrega ou Devolução sem sair da tela de inventário.',
+      'Checklist de devolução e impressão automática de termos mantidos no novo fluxo.',
+      'Sincronização opcional de Setor/Centro de Custo no momento da entrega.',
+      'Reforçada a trava de descarte: Itens "Descartados" não permitem entrega, devolução ou edição.'
     ]
   },
     {
-    version: '1.9.1',
+    version: '1.9.2',
     date: '26/01/2025',
-    title: 'Edição em Massa Multi-Campos',
+    title: 'Governança & Soft Delete',
     changes: [
-      'Restaurada funcionalidade completa de Atualização em Massa para Dispositivos: edite Status, Modelo, Setor ou Centro de Custo de uma só vez.',
-      'Normalização profunda de Status na importação: Interpreta variações como "disponivel", "em uso", "manutencao" ignorando acentos e caixa alta/baixa.',
-      'Corrigida URL definitiva do MDM Pulsus: https://app.pulsus.mobi/devices/.'
+      'Implementado o "Soft Delete": Exclusão agora move para a aba "Descartado" com registro de motivo.',
+      'Ativos descartados tornam-se somente leitura para preservar histórico de auditoria.'
     ]
   },
   {
@@ -33,10 +33,8 @@ const versions = [
     date: '01/08/2023',
     title: 'MVP - Lançamento Inicial',
     changes: [
-      'CRUD básico de Dispositivos.',
-      'CRUD básico de Chips/SIMs.',
-      'CRUD básico de Usuários.',
-      'Dashboard geral.'
+      'CRUD básico de Dispositivos, Chips e Usuários.',
+      'Dashboard e Gestão de Termos.'
     ]
   }
 ];
@@ -46,7 +44,6 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ onClose }) => {
     <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
         
-        {/* Header */}
         <div className="bg-slate-900 px-8 py-6 flex justify-between items-start shrink-0 relative overflow-hidden">
           <div className="relative z-10">
             <h2 className="text-2xl font-bold text-white mb-1">Sobre o Sistema</h2>
@@ -55,14 +52,12 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ onClose }) => {
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors relative z-10">
             <X size={24} />
           </button>
-          
           <div className="absolute -right-10 -top-10 text-slate-800 opacity-50">
              <GitCommit size={150} />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8">
-          
           <div className="mb-8 bg-blue-50 border border-blue-100 rounded-xl p-5 flex items-center gap-4">
              <div className="bg-white p-3 rounded-full shadow-sm border border-blue-100">
                 <User size={24} className="text-blue-600"/>
@@ -84,7 +79,6 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ onClose }) => {
                 <div className={`absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-white shadow-sm 
                     ${index === 0 ? 'bg-blue-600 ring-4 ring-blue-100' : 'bg-slate-300'}`}>
                 </div>
-
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
                     <span className={`px-2 py-0.5 rounded text-xs font-bold border ${index === 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                         v{ver.version}
@@ -93,9 +87,7 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ onClose }) => {
                         <Calendar size={12}/> {ver.date}
                     </span>
                 </div>
-                
                 <h4 className="text-base font-bold text-slate-800 mb-2">{ver.title}</h4>
-                
                 <ul className="space-y-1">
                     {ver.changes.map((change, i) => (
                         <li key={i} className="text-sm text-slate-600 flex items-start gap-2">
@@ -107,13 +99,10 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ onClose }) => {
               </div>
             ))}
           </div>
-
         </div>
-        
         <div className="bg-slate-50 border-t px-8 py-4 text-center">
              <p className="text-xs text-slate-400">© 2025 IT Asset 360. Todos os direitos reservados.</p>
         </div>
-
       </div>
     </div>
   );
