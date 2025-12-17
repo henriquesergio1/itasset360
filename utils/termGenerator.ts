@@ -250,14 +250,6 @@ export const generateAndPrintTerm = ({
                 <span style="font-size: 10px; color: #94a3b8;">CPF: ${user.cpf}</span>
             </div>
         </div>
-        ${actionType === 'DEVOLUCAO' ? `
-        <div style="width: 50%; margin: 30px auto 0 auto; text-align: center;">
-            <div style="border-top: 1px solid #000; padding-top: 5px;">
-                <strong style="font-size: 12px; color: #000; text-transform: uppercase;">DEPARTAMENTO DE T.I.</strong><br>
-                <span style="font-size: 10px; color: #64748b;">Responsável pelo Recebimento</span>
-            </div>
-        </div>
-        ` : ''}
     </div>
   `;
 
