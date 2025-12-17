@@ -37,7 +37,6 @@ const DataImporter = () => {
 
   const adminName = currentUser?.name || 'Importador';
 
-  // Usamos ";" para compatibilidade nativa com Excel em Português
   const getTemplateHeaders = () => {
       switch(importType) {
           case 'USERS': return 'Nome Completo;Email;CPF;PIS;Cargo/Funcao (Dropdown);Setor/Codigo (Texto);RG;Endereco';
@@ -49,7 +48,7 @@ const DataImporter = () => {
 
   const downloadTemplate = () => {
       const headers = getTemplateHeaders();
-      const blob = new Blob(["\uFEFF" + headers], { type: 'text/csv;charset=utf-8;' }); // BOM para Excel
+      const blob = new Blob(["\uFEFF" + headers], { type: 'text/csv;charset=utf-8;' }); 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -71,7 +70,6 @@ const DataImporter = () => {
       const lines = text.split('\n').filter(l => l.trim());
       if (lines.length < 2) return alert('Arquivo vazio ou sem dados.');
       
-      // Detecta se usa vírgula ou ponto-e-vírgula
       const firstLine = lines[0];
       const separator = firstLine.includes(';') ? ';' : ',';
       
@@ -91,27 +89,27 @@ const DataImporter = () => {
   const analyzeRow = (row: any): AnalysisResult => {
       try {
           if (importType === 'USERS') {
-              const email = row['Email'];
-              const cpf = row['CPF'];
+              const email = row['Email']?.trim();
+              const cpf = row['CPF']?.trim();
               if (!email && !cpf) throw new Error('Email ou CPF obrigatório');
               const existing = users.find(u => (email && u.email.toLowerCase() === email.toLowerCase()) || (cpf && u.cpf.replace(/\D/g,'') === cpf.replace(/\D/g,'')));
               if (!existing) return { status: 'NEW', row, selected: true };
               return { status: 'CONFLICT', row, existingId: existing.id, selected: true };
           } else if (importType === 'DEVICES') {
-              const tag = row['Patrimonio'];
-              const imei = row['IMEI'];
-              // Se tiver IMEI, Patrimonio não é obrigatório e vice-versa
+              const tag = row['Patrimonio']?.trim();
+              const imei = row['IMEI']?.trim();
+              
               if (!tag && !imei) throw new Error('Identificação (Patrimônio ou IMEI) é obrigatória');
               
               const existing = devices.find(d => 
-                  (tag && d.assetTag.toLowerCase() === tag.toLowerCase()) || 
-                  (imei && d.imei === imei)
+                  (tag && d.assetTag && d.assetTag.toLowerCase() === tag.toLowerCase()) || 
+                  (imei && d.imei && d.imei === imei)
               );
               
               if (!existing) return { status: 'NEW', row, selected: true };
               return { status: 'CONFLICT', row, existingId: existing.id, selected: true };
           } else {
-              const num = row['Numero'];
+              const num = row['Numero']?.trim();
               if (!num) throw new Error('Número é obrigatório');
               const existing = sims.find(s => s.phoneNumber === num);
               if (!existing) return { status: 'NEW', row, selected: true };
@@ -153,52 +151,56 @@ const DataImporter = () => {
               if (importType === 'DEVICES') {
                   const r = item.row;
                   
-                  // Resolução de Dependências (Marca, Tipo, Modelo)
                   const bName = r['Marca'] || 'Genérica';
-                  let bId = brands.find(b => b.name.toLowerCase() === bName.toLowerCase())?.id || brandCache.get(bName.toLowerCase());
+                  let bId = brands.find(b => b.name.toLowerCase() === bName.trim().toLowerCase())?.id || brandCache.get(bName.trim().toLowerCase());
                   if (!bId) {
                       bId = Math.random().toString(36).substr(2, 9);
-                      addBrand({ id: bId, name: bName }, adminName);
-                      brandCache.set(bName.toLowerCase(), bId);
+                      addBrand({ id: bId, name: bName.trim() }, adminName);
+                      brandCache.set(bName.trim().toLowerCase(), bId);
                   }
 
-                  const tName = r['Tipo'] || 'Outros';
-                  let tId = assetTypes.find(t => t.name.toLowerCase() === tName.toLowerCase())?.id || typeCache.get(tName.toLowerCase());
+                  const tNameRaw = r['Tipo'] || 'Outros';
+                  const tNameClean = tNameRaw.trim();
+                  // Normalização de tipo inteligente
+                  let tId = assetTypes.find(t => 
+                    t.name.toLowerCase() === tNameClean.toLowerCase() || 
+                    (tNameClean.toLowerCase() === 'celular' && t.name.toLowerCase() === 'smartphone') ||
+                    (tNameClean.toLowerCase() === 'computador' && t.name.toLowerCase() === 'notebook')
+                  )?.id || typeCache.get(tNameClean.toLowerCase());
+
                   if (!tId) {
                       tId = Math.random().toString(36).substr(2, 9);
-                      addAssetType({ id: tId, name: tName }, adminName);
-                      typeCache.set(tName.toLowerCase(), tId);
+                      addAssetType({ id: tId, name: tNameClean }, adminName);
+                      typeCache.set(tNameClean.toLowerCase(), tId);
                   }
 
                   const mName = r['Modelo'] || 'Genérico';
-                  let mId = models.find(m => m.name.toLowerCase() === mName.toLowerCase() && m.brandId === bId)?.id || modelCache.get(mName.toLowerCase() + bId);
+                  let mId = models.find(m => m.name.toLowerCase() === mName.trim().toLowerCase() && m.brandId === bId)?.id || modelCache.get(mName.trim().toLowerCase() + bId);
                   if (!mId) {
                       mId = Math.random().toString(36).substr(2, 9);
-                      addModel({ id: mId, name: mName, brandId: bId, typeId: tId, imageUrl: '' }, adminName);
-                      modelCache.set(mName.toLowerCase() + bId, mId);
+                      addModel({ id: mId, name: mName.trim(), brandId: bId, typeId: tId, imageUrl: '' }, adminName);
+                      modelCache.set(mName.trim().toLowerCase() + bId, mId);
                   }
 
-                  // Tratamento Financeiro Robusto
                   const rawCost = r['Valor Pago'] || '0';
                   const cleanCost = parseFloat(rawCost.toString().replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                  
-                  // Tratamento de Datas
                   const rawDate = r['Data Compra'] || r['Data'] || new Date().toISOString().split('T')[0];
 
                   const deviceData: Device = {
                       id: item.status === 'NEW' ? Math.random().toString(36).substr(2, 9) : item.existingId!,
                       modelId: mId,
-                      assetTag: r['Patrimonio'] || r['IMEI'],
-                      serialNumber: r['Serial'] || r['Patrimonio'] || r['IMEI'],
+                      assetTag: r['Patrimonio']?.trim() || r['IMEI']?.trim(),
+                      serialNumber: r['Serial']?.trim() || r['Patrimonio']?.trim() || r['IMEI']?.trim(),
                       status: (r['Status'] as DeviceStatus) || DeviceStatus.AVAILABLE,
                       purchaseCost: cleanCost,
                       purchaseDate: rawDate,
                       supplier: r['Fornecedor'] || '',
                       pulsusId: r['ID Pulsus'] || '',
-                      imei: r['IMEI'] || undefined,
+                      imei: r['IMEI']?.trim() || undefined,
                       sectorId: resolveSector(r['Setor Ativo']),
                       costCenter: r['Centro de Custo'] || '',
-                      currentUserId: null
+                      currentUserId: null,
+                      customData: {}
                   };
 
                   if (item.status === 'NEW') {
@@ -213,9 +215,9 @@ const DataImporter = () => {
                    const sId = resolveSector(r['Cargo/Funcao (Dropdown)']);
                    const userData: User = {
                        id: item.status === 'NEW' ? Math.random().toString(36).substr(2, 9) : item.existingId!,
-                       fullName: r['Nome Completo'],
-                       email: r['Email'],
-                       cpf: r['CPF'],
+                       fullName: r['Nome Completo']?.trim(),
+                       email: r['Email']?.trim(),
+                       cpf: r['CPF']?.trim(),
                        pis: r['PIS'] || '',
                        jobTitle: r['Setor/Codigo (Texto)'] || '',
                        sectorId: sId,
@@ -245,12 +247,12 @@ const DataImporter = () => {
         <div className="mb-6 flex justify-between items-start">
             <div>
                 <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                    <Database className="text-blue-600"/> Importador de Dados (v1.8.4)
+                    <Database className="text-blue-600"/> Importador Inteligente (v1.8.5)
                 </h3>
-                <p className="text-sm text-gray-500">Baixe o modelo e importe ID Pulsus, Setores e Custos com precisão.</p>
+                <p className="text-sm text-gray-500">Mapeamento automático de Tipos e tratamento rigoroso de IMEI/Patrimônio.</p>
             </div>
             {step !== 'UPLOAD' && (
-                <button onClick={() => setStep('UPLOAD')} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                <button onClick={() => setStep('UPLOAD')} className="text-sm text-blue-600 hover:underline flex items-center gap-1 font-bold">
                     <RefreshCcw size={14}/> Reiniciar
                 </button>
             )}
@@ -260,97 +262,100 @@ const DataImporter = () => {
             <div className="space-y-6">
                 <div className="flex gap-4">
                     {(['USERS', 'DEVICES', 'SIMS'] as ImportType[]).map(t => (
-                        <button key={t} onClick={() => setImportType(t)} className={`flex-1 py-4 border rounded-xl flex flex-col items-center gap-2 transition-all ${importType === t ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm' : 'hover:bg-gray-50'}`}>
-                            <span className="font-bold">{t === 'USERS' ? 'Colaboradores' : t === 'DEVICES' ? 'Dispositivos' : 'Chips'}</span>
+                        <button key={t} onClick={() => setImportType(t)} className={`flex-1 py-5 border rounded-2xl flex flex-col items-center gap-2 transition-all ${importType === t ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md scale-[1.02]' : 'hover:bg-gray-50 text-gray-500'}`}>
+                            <span className="font-black text-lg uppercase tracking-tighter">{t === 'USERS' ? 'Colaboradores' : t === 'DEVICES' ? 'Dispositivos' : 'Chips'}</span>
                         </button>
                     ))}
                 </div>
-                <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-10 flex flex-col items-center justify-center gap-4">
+                <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-12 flex flex-col items-center justify-center gap-6">
                     <div className="flex gap-4">
-                        <button onClick={downloadTemplate} className="flex items-center gap-2 text-sm bg-white border border-gray-300 px-5 py-3 rounded-lg hover:bg-gray-100 shadow-sm font-bold text-gray-700">
+                        <button onClick={downloadTemplate} className="flex items-center gap-2 text-sm bg-white border border-gray-300 px-6 py-3 rounded-xl hover:bg-gray-100 shadow-sm font-bold text-gray-700 transition-all">
                             <Download size={18} className="text-blue-600"/> Baixar Modelo CSV
                         </button>
-                        <label className="flex items-center gap-2 text-sm bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 cursor-pointer shadow-md transition-colors font-bold">
+                        <label className="flex items-center gap-2 text-sm bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 cursor-pointer shadow-lg transition-all font-bold">
                             <Upload size={18}/> Selecionar Arquivo
                             <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
                         </label>
                     </div>
-                    <div className="text-[10px] text-gray-400 text-center flex flex-col gap-1">
-                        <span>* O modelo usa ponto e vírgula (;) para garantir compatibilidade com Excel em PT-BR.</span>
-                        <span>* ID Pulsus e Setor do Equipamento estão incluídos na aba de Dispositivos.</span>
+                    <div className="text-[11px] text-gray-400 text-center space-y-1">
+                        <p className="flex items-center justify-center gap-1"><CheckCircle size={12} className="text-green-500"/> IMEI ou Patrimônio agora são validados sem espaços em branco.</p>
+                        <p className="flex items-center justify-center gap-1"><CheckCircle size={12} className="text-green-500"/> "Celular" será automaticamente vinculado ao tipo "Smartphone" se existir.</p>
                     </div>
                 </div>
             </div>
         )}
 
         {step === 'ANALYSIS' && (
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden animate-fade-in">
                 <div className="flex gap-4 mb-4">
-                    <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold uppercase">{analyzedData.filter(i => i.status === 'NEW').length} Novos</div>
-                    <div className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold uppercase">{analyzedData.filter(i => i.status === 'CONFLICT').length} Atualizações</div>
+                    <div className="bg-green-100 text-green-700 px-4 py-1.5 rounded-full text-xs font-black uppercase shadow-sm">{analyzedData.filter(i => i.status === 'NEW').length} Novos</div>
+                    <div className="bg-orange-100 text-orange-700 px-4 py-1.5 rounded-full text-xs font-black uppercase shadow-sm">{analyzedData.filter(i => i.status === 'CONFLICT').length} Atualizações</div>
                 </div>
-                <div className="flex-1 overflow-y-auto border rounded-lg">
+                <div className="flex-1 overflow-y-auto border rounded-xl shadow-inner bg-white">
                     <table className="w-full text-xs text-left">
-                        <thead className="bg-gray-50 sticky top-0 shadow-sm">
+                        <thead className="bg-slate-100 sticky top-0 shadow-sm z-10">
                             <tr>
-                                <th className="px-4 py-3">Identificador</th>
-                                <th className="px-4 py-3">Ação</th>
-                                <th className="px-4 py-3">Detalhes Detectados</th>
+                                <th className="px-6 py-4 font-black text-slate-600 uppercase">Identificador</th>
+                                <th className="px-6 py-4 font-black text-slate-600 uppercase">Ação</th>
+                                <th className="px-6 py-4 font-black text-slate-600 uppercase">Diagnóstico</th>
                             </tr>
                         </thead>
                         <tbody>
                             {analyzedData.map((item, idx) => (
-                                <tr key={idx} className="border-b hover:bg-gray-50">
-                                    <td className="px-4 py-2 font-mono">
+                                <tr key={idx} className="border-b hover:bg-blue-50/30 transition-colors">
+                                    <td className="px-6 py-3 font-mono font-bold text-blue-900">
                                         {importType === 'USERS' ? item.row['Email'] : (item.row['Patrimonio'] || `IMEI: ${item.row['IMEI']}`)}
                                     </td>
-                                    <td className="px-4 py-2">
-                                        <span className={`px-2 py-0.5 rounded font-bold ${item.status === 'NEW' ? 'bg-green-100 text-green-700' : item.status === 'CONFLICT' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+                                    <td className="px-6 py-3">
+                                        <span className={`px-2.5 py-1 rounded font-black text-[10px] ${item.status === 'NEW' ? 'bg-green-100 text-green-700' : item.status === 'CONFLICT' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
                                             {item.status === 'NEW' ? 'CRIAR' : item.status === 'CONFLICT' ? 'ATUALIZAR' : 'ERRO'}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-2 text-gray-500">
-                                        {item.errorMsg ? <span className="text-red-600 font-bold">{item.errorMsg}</span> : 
-                                         item.status === 'CONFLICT' ? 'Vincular a ID existente' : 'Cadastro novo'}
+                                    <td className="px-6 py-3 text-gray-500 italic">
+                                        {item.errorMsg ? <span className="text-red-600 font-bold flex items-center gap-1"><AlertTriangle size={12}/> {item.errorMsg}</span> : 
+                                         item.status === 'CONFLICT' ? 'Registro existente encontrado. Os dados serão mesclados.' : 'Tudo pronto para o novo cadastro.'}
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
-                <button onClick={executeImport} className="mt-4 bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-blue-700 flex justify-center items-center gap-2">
-                    Confirmar Processamento de {analyzedData.filter(x => x.status !== 'ERROR').length} Itens
+                <button onClick={executeImport} className="mt-4 bg-blue-600 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all hover:scale-[1.01] active:scale-100">
+                    Iniciar Processamento de {analyzedData.filter(x => x.status !== 'ERROR').length} Registros
                 </button>
             </div>
         )}
 
         {step === 'PROCESSING' && (
-            <div className="flex flex-col items-center justify-center flex-1 space-y-6">
-                <Loader2 size={48} className="text-blue-600 animate-spin"/>
-                <div className="text-center">
-                    <h3 className="text-lg font-bold">Processando {progress.current} de {progress.total}</h3>
-                    <p className="text-sm text-gray-500 italic">Gravando no banco de dados e processando setores...</p>
+            <div className="flex flex-col items-center justify-center flex-1 space-y-8 animate-pulse">
+                <div className="relative">
+                    <Loader2 size={64} className="text-blue-600 animate-spin"/>
+                    <Database className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-400" size={24}/>
                 </div>
-                <div className="w-full max-w-md bg-gray-100 rounded-full h-4 overflow-hidden shadow-inner">
-                    <div className="bg-blue-600 h-full transition-all duration-300" style={{width: `${(progress.current/progress.total)*100}%`}}></div>
+                <div className="text-center">
+                    <h3 className="text-2xl font-black text-slate-800">Sincronizando {progress.current} de {progress.total}</h3>
+                    <p className="text-gray-500 font-medium">Não feche esta janela. Salvando no SQL Server...</p>
+                </div>
+                <div className="w-full max-w-md bg-gray-100 rounded-full h-5 overflow-hidden shadow-inner border">
+                    <div className="bg-blue-600 h-full transition-all duration-500 ease-out shadow-lg" style={{width: `${(progress.current/progress.total)*100}%`}}></div>
                 </div>
             </div>
         )}
 
         {step === 'DONE' && (
-            <div className="flex flex-col items-center justify-center flex-1 space-y-4">
-                <div className="h-20 w-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-2 animate-bounce"><CheckCircle size={48}/></div>
-                <h3 className="text-2xl font-bold">Importação Concluída</h3>
-                <div className="grid grid-cols-3 gap-8 text-center bg-white p-8 rounded-2xl border shadow-sm w-full max-w-lg">
-                    <div><p className="text-3xl font-black text-green-600">{progress.created}</p><p className="text-xs uppercase font-bold text-gray-400">Novos</p></div>
-                    <div><p className="text-3xl font-black text-orange-600">{progress.updated}</p><p className="text-xs uppercase font-bold text-gray-400">Atualizados</p></div>
-                    <div><p className="text-3xl font-black text-red-600">{progress.errors}</p><p className="text-xs uppercase font-bold text-gray-400">Erros</p></div>
+            <div className="flex flex-col items-center justify-center flex-1 space-y-6">
+                <div className="h-24 w-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center shadow-lg border-4 border-green-50 animate-bounce"><CheckCircle size={56}/></div>
+                <h3 className="text-3xl font-black text-slate-800">Importação Finalizada!</h3>
+                <div className="grid grid-cols-3 gap-6 text-center bg-white p-10 rounded-3xl border shadow-xl w-full max-w-xl">
+                    <div className="space-y-1"><p className="text-4xl font-black text-green-600">{progress.created}</p><p className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Criados</p></div>
+                    <div className="space-y-1"><p className="text-4xl font-black text-orange-500">{progress.updated}</p><p className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Atualizados</p></div>
+                    <div className="space-y-1"><p className="text-4xl font-black text-red-600">{progress.errors}</p><p className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Erros</p></div>
                 </div>
-                <button onClick={() => setStep('UPLOAD')} className="bg-blue-600 text-white px-10 py-3 rounded-xl font-bold shadow-md hover:bg-blue-700 mt-4 transition-transform hover:scale-105">Voltar ao Início</button>
+                <button onClick={() => setStep('UPLOAD')} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase tracking-wider shadow-lg hover:bg-black transition-all hover:scale-105">Voltar para o Início</button>
                 {logs.length > 0 && (
-                    <div className="w-full max-w-md bg-red-50 p-4 rounded-lg text-xs text-red-700 border border-red-100 max-h-40 overflow-y-auto">
-                        <strong>Relatório Detalhado de Erros:</strong>
-                        <ul className="list-disc pl-4 mt-1">{logs.map((l, i) => <li key={i}>{l}</li>)}</ul>
+                    <div className="w-full max-w-xl bg-red-50 p-6 rounded-2xl text-xs text-red-700 border border-red-200 max-h-48 overflow-y-auto shadow-inner">
+                        <strong className="block mb-2 text-red-800 uppercase font-black">Relatório de Exceções:</strong>
+                        <ul className="space-y-1 list-disc pl-4">{logs.map((l, i) => <li key={i} className="font-medium">{l}</li>)}</ul>
                     </div>
                 )}
             </div>

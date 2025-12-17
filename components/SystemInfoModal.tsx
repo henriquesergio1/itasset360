@@ -8,25 +8,25 @@ interface SystemInfoModalProps {
 
 const versions = [
     {
-    version: '1.8.4',
+    version: '1.8.5',
     date: 'Hoje',
+    title: 'Dynamic Fields & Intelligence',
+    changes: [
+      'Renderização dinâmica de campos personalizados (RAM, Armazenamento, etc) no formulário de Dispositivos com base no Tipo de Ativo.',
+      'Aprimorado motor de importação: correção rigorosa de espaços em branco em IMEI e Patrimônio.',
+      'Normalização inteligente de tipos na importação (ex: "Celular" agora é mapeado para "Smartphone" automaticamente).',
+      'Correção de bug onde tipos de equipamentos importados ficavam como "Outros" indevidamente.'
+    ]
+  },
+    {
+    version: '1.8.4',
+    date: '20/01/2025',
     title: 'Excel BR & Gestão de Manutenção',
     changes: [
       'Modelo CSV alterado para ";" (ponto e vírgula) para compatibilidade nativa com Excel em Português.',
       'Corrigida importação de ID Pulsus, Setor Ativo e Centro de Custo no fluxo de dispositivos.',
-      'Refinado tratamento financeiro no importador: limpeza de "R$" e pontos de milhar para evitar valores zerados.',
-      'Melhoria na tela de Manutenção: Adicionado campo específico para anexo/link de Nota de Serviço.',
-      'Flexibilização de identificação: O campo Patrimônio torna-se opcional se o IMEI for informado na importação.'
-    ]
-  },
-    {
-    version: '1.8.3',
-    date: '15/01/2025',
-    title: 'Correção Crítica de Importação',
-    changes: [
-      'Correção definitiva do modelo CSV: inclusão visual e lógica dos campos ID Pulsus, Setor Ativo e Centro de Custo.',
-      'Melhoria no tratamento de valores financeiros (conversão de vírgula para ponto e limpeza de R$).',
-      'Aprimorada a busca por correspondência de nomes de colunas no CSV para evitar campos vazios.'
+      'Refinado tratamento financeiro no importador: limpeza de "R$" e pontos de milhar.',
+      'Melhoria na tela de Manutenção: Adicionado campo específico para anexo/link de Nota de Serviço.'
     ]
   },
     {
@@ -34,9 +34,8 @@ const versions = [
     date: '12/01/2025',
     title: 'Importação Inteligente & Sincronização',
     changes: [
-      'Correção na importação CSV: O campo Patrimônio agora é opcional se o IMEI for fornecido (soberania do IMEI para dispositivos móveis).',
-      'Detecção de duplicados aprimorada no importador (Tag OU IMEI).',
-      'Adicionada opção "Sincronizar Cadastro" no fluxo de entrega: permite que o ativo herde automaticamente o Setor/Cód. do colaborador.'
+      'Correção na importação CSV: O campo Patrimônio agora é opcional se o IMEI for fornecido.',
+      'Adicionada opção "Sincronizar Cadastro" no fluxo de entrega: permite que o ativo herde o Setor/Cód. do colaborador.'
     ]
   },
   {

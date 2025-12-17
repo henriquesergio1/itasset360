@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { HashRouter, Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom';
 import { LayoutDashboard, Smartphone, Users, Repeat, LogOut, Menu, X, Cpu, ShieldCheck, Info } from 'lucide-react';
@@ -122,7 +123,8 @@ const Layout = ({ children }: { children?: React.ReactNode }) => {
   );
 };
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+// Fixed: ProtectedRoute now accepts optional children to avoid TypeScript errors regarding missing 'children' property
+const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
     const { isAuthenticated } = useAuth();
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
@@ -130,7 +132,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Layout>{children}</Layout>;
 };
 
-const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+// Fixed: AdminRoute now accepts optional children to avoid TypeScript errors regarding missing 'children' property
+const AdminRoute = ({ children }: { children?: React.ReactNode }) => {
     const { isAuthenticated, isAdmin } = useAuth();
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;

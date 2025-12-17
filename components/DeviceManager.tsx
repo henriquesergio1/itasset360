@@ -1,10 +1,8 @@
 
-// ... existing imports
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Device, DeviceStatus, MaintenanceRecord, MaintenanceType, ActionType, ReturnChecklist, DeviceAccessory } from '../types';
-// Added missing 'Upload' import
+import { Device, DeviceStatus, MaintenanceRecord, MaintenanceType, ActionType, ReturnChecklist, DeviceAccessory, AssetType, CustomField } from '../types';
 import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid, Eye, AlertTriangle, HardDrive, SmartphoneNfc, Sliders, MapPin, Upload } from 'lucide-react';
 import ModelSettings from './ModelSettings';
 import { generateAndPrintTerm } from '../utils/termGenerator';
@@ -90,6 +88,23 @@ const DeviceManager = () => {
 
   const deviceMaintenances = maintenances.filter(m => m.deviceId === editingId);
 
+  // --- LÓGICA DE CAMPOS PERSONALIZADOS ---
+  const currentModel = models.find(m => m.id === formData.modelId);
+  const currentAssetType = assetTypes.find(t => t.id === currentModel?.typeId);
+  const relevantFields = currentAssetType?.customFieldIds 
+    ? customFields.filter(f => currentAssetType.customFieldIds?.includes(f.id))
+    : [];
+
+  const updateCustomData = (fieldId: string, value: string) => {
+      setFormData(prev => ({
+          ...prev,
+          customData: {
+              ...(prev.customData || {}),
+              [fieldId]: value
+          }
+      }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -109,7 +124,7 @@ const DeviceManager = () => {
 
       <div className="relative">
         <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-        <input type="text" placeholder="Buscar..." className="pl-10 w-full border rounded-lg py-2" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+        <input type="text" placeholder="Buscar..." className="pl-10 w-full border rounded-lg py-2 focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -148,8 +163,8 @@ const DeviceManager = () => {
                   </td>
                   <td className="px-6 py-4 text-xs font-medium text-gray-700">{user?.fullName || '-'}</td>
                   <td className="px-6 py-4 text-right">
-                    <button onClick={() => handleOpenModal(d)} className="text-blue-600 hover:bg-blue-50 p-1 rounded"><Edit2 size={16}/></button>
-                    <button onClick={() => deleteDevice(d.id, adminName, 'Exclusão manual')} className="text-red-500 hover:bg-red-50 p-1 rounded ml-1"><Trash2 size={16}/></button>
+                    <button onClick={() => handleOpenModal(d)} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors"><Edit2 size={16}/></button>
+                    <button onClick={() => deleteDevice(d.id, adminName, 'Exclusão manual')} className="text-red-500 hover:bg-red-50 p-1 rounded ml-1 transition-colors"><Trash2 size={16}/></button>
                   </td>
                 </tr>
               )
@@ -159,16 +174,16 @@ const DeviceManager = () => {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-fade-in">
-            <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
+            <div className="bg-slate-900 px-6 py-4 flex justify-between items-center shrink-0">
               <h3 className="text-lg font-bold text-white">{editingId ? 'Editar Dispositivo' : 'Novo Dispositivo'}</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white"><X size={20}/></button>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white transition-colors"><X size={20}/></button>
             </div>
             
-            <div className="flex border-b">
+            <div className="flex border-b shrink-0 bg-gray-50">
                 {['GENERAL', 'ACCESSORIES', 'FINANCIAL', 'MAINTENANCE', 'HISTORY'].map(tab => (
-                    <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === tab ? 'border-blue-600 text-blue-600 bg-blue-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}>
+                    <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === tab ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-gray-500 hover:bg-gray-100'}`}>
                         {tab === 'GENERAL' ? 'Geral' : tab === 'ACCESSORIES' ? 'Acessórios' : tab === 'FINANCIAL' ? 'Financeiro' : tab === 'MAINTENANCE' ? 'Manutenção' : 'Histórico'}
                     </button>
                 ))}
@@ -179,28 +194,50 @@ const DeviceManager = () => {
                   <form id="devForm" onSubmit={handleDeviceSubmit} className="grid grid-cols-2 gap-4">
                      <div className="col-span-2">
                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Modelo do Equipamento</label>
-                         <select required className="w-full border rounded-lg p-2 bg-gray-50" value={formData.modelId} onChange={e => setFormData({...formData, modelId: e.target.value})}>
-                            <option value="">Selecione...</option>
+                         <select required className="w-full border rounded-lg p-2.5 bg-gray-50 focus:bg-white transition-colors" value={formData.modelId} onChange={e => setFormData({...formData, modelId: e.target.value})}>
+                            <option value="">Selecione o modelo...</option>
                             {models.map(m => <option key={m.id} value={m.id}>{m.name} ({brands.find(b => b.id === m.brandId)?.name})</option>)}
                          </select>
                      </div>
+
                      <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3">
                          <div className="flex gap-4">
-                             <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'TAG'} onChange={() => setIdType('TAG')} /> Patrimônio</label>
-                             <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'IMEI'} onChange={() => setIdType('IMEI')} /> IMEI (Móvel)</label>
+                             <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'TAG'} onChange={() => setIdType('TAG')} className="text-blue-600"/> Patrimônio</label>
+                             <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'IMEI'} onChange={() => setIdType('IMEI')} className="text-blue-600"/> IMEI (Móvel)</label>
                          </div>
-                         <input required className="w-full border rounded-lg p-2 font-mono text-sm" placeholder={idType === 'TAG' ? 'Patrimônio / Tag' : 'IMEI (15 dígitos)'} value={formData.assetTag || ''} onChange={e => setFormData({...formData, assetTag: e.target.value, imei: idType === 'IMEI' ? e.target.value : undefined})} />
+                         <input required className="w-full border rounded-lg p-2.5 font-mono text-sm bg-white shadow-sm" placeholder={idType === 'TAG' ? 'TAG-001' : 'IMEI (15 dígitos)'} value={formData.assetTag || ''} onChange={e => setFormData({...formData, assetTag: e.target.value, imei: idType === 'IMEI' ? e.target.value : undefined})} />
                      </div>
-                     <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Número de Série</label><input required className="w-full border rounded-lg p-2 text-sm" value={formData.serialNumber || ''} onChange={e => setFormData({...formData, serialNumber: e.target.value})}/></div>
-                     <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">ID Pulsus (MDM)</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.pulsusId || ''} onChange={e => setFormData({...formData, pulsusId: e.target.value})}/></div>
+
+                     {/* CAMPOS DINÂMICOS - RENDEREIZADOS SE HOUVER TIPO DEFINIDO */}
+                     {relevantFields.length > 0 && (
+                         <div className="col-span-2 grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200 animate-fade-in">
+                            <h4 className="col-span-2 text-[10px] font-black uppercase text-gray-400 mb-1 flex items-center gap-2">
+                                <Sliders size={12}/> Especificações Técnicas ({currentAssetType?.name})
+                            </h4>
+                            {relevantFields.map(field => (
+                                <div key={field.id}>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">{field.name}</label>
+                                    <input 
+                                        className="w-full border rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" 
+                                        value={formData.customData?.[field.id] || ''} 
+                                        onChange={e => updateCustomData(field.id, e.target.value)}
+                                        placeholder={`Informe ${field.name}...`}
+                                    />
+                                </div>
+                            ))}
+                         </div>
+                     )}
+
+                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Número de Série</label><input required className="w-full border rounded-lg p-2 text-sm" value={formData.serialNumber || ''} onChange={e => setFormData({...formData, serialNumber: e.target.value})}/></div>
+                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">ID Pulsus (MDM)</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.pulsusId || ''} onChange={e => setFormData({...formData, pulsusId: e.target.value})}/></div>
                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Setor Atual do Ativo</label>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Setor Atual do Ativo</label>
                         <select className="w-full border rounded-lg p-2 text-sm" value={formData.sectorId} onChange={e => setFormData({...formData, sectorId: e.target.value})}>
-                            <option value="">Selecione...</option>
+                            <option value="">Selecione o setor...</option>
                             {sectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                      </div>
-                     <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Centro de Custo / Cód Setor</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.costCenter || ''} onChange={e => setFormData({...formData, costCenter: e.target.value})}/></div>
+                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Centro de Custo / Cód Setor</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.costCenter || ''} onChange={e => setFormData({...formData, costCenter: e.target.value})}/></div>
                   </form>
                 )}
 
