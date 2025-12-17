@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { SystemUser, SystemRole, ActionType } from '../types';
 import { Shield, Settings, Activity, Trash2, Plus, X, Edit2, Save, Database, Server, FileCode, FileText, Bold, Italic, Heading1, List, Eye, ArrowLeftRight, UploadCloud, Info } from 'lucide-react';
 import DataImporter from './DataImporter';
+import { generateAndPrintTerm } from '../utils/termGenerator';
 
 const AdminPanel = () => {
   const { systemUsers, addSystemUser, updateSystemUser, deleteSystemUser, settings, updateSettings, logs } = useData();
@@ -109,6 +110,46 @@ const AdminPanel = () => {
               [field]: value
           }
       }));
+  };
+
+  // --- PREVIEW HANDLER ---
+  const handlePreview = () => {
+      // 1. Create temporary settings with current text (even if not saved)
+      const tempSettings = {
+          ...settingsForm,
+          termTemplate: JSON.stringify(termConfig)
+      };
+
+      // 2. Mock Data
+      const mockUser = {
+          id: 'preview_u',
+          fullName: 'João da Silva (Exemplo)',
+          cpf: '123.456.789-00',
+          rg: '12.345.678-9',
+          email: 'joao.silva@empresa.com',
+          jobTitle: 'Cód: TI-001',
+          active: true
+      };
+      const mockAsset = {
+          id: 'preview_a',
+          serialNumber: 'SN-EXAMPLE-01',
+          assetTag: 'TAG-9999',
+          status: 'Em Uso'
+      };
+
+      // 3. Generate
+      generateAndPrintTerm({
+          user: mockUser as any,
+          asset: mockAsset as any,
+          settings: tempSettings,
+          model: { name: 'Notebook Dell Latitude 3420' } as any,
+          brand: { name: 'Dell' } as any,
+          type: { name: 'Notebook' } as any,
+          actionType: activeTemplateType === 'DELIVERY' ? 'ENTREGA' : 'DEVOLUCAO',
+          sectorName: 'Tecnologia da Informação',
+          notes: 'Este é um termo de exemplo para visualização de layout e formatação.',
+          checklist: activeTemplateType === 'RETURN' ? { 'Notebook': true, 'Carregador': true, 'Mouse': true } : undefined
+      });
   };
 
   // --- RICH TEXT HELPERS ---
@@ -344,9 +385,14 @@ const AdminPanel = () => {
                     <h3 className="text-lg font-bold text-gray-800">Editor de Documentos</h3>
                     <p className="text-sm text-gray-500">Personalize o texto jurídico dos termos. Use a barra de ferramentas para formatação.</p>
                   </div>
-                  <button onClick={handleTermSave} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 shadow-sm font-medium">
-                      <Save size={18} /> Salvar Textos
-                  </button>
+                  <div className="flex gap-2">
+                      <button onClick={handlePreview} className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 shadow-sm font-medium transition-colors">
+                          <Eye size={18} /> Visualizar Exemplo
+                      </button>
+                      <button onClick={handleTermSave} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 shadow-sm font-medium transition-colors">
+                          <Save size={18} /> Salvar Textos
+                      </button>
+                  </div>
               </div>
 
               {/* Template Switcher */}
