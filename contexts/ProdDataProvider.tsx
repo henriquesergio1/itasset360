@@ -1,3 +1,5 @@
+
+// ... imports
 import React, { useState, useEffect } from 'react';
 import { DataContext, DataContextType } from './DataContext';
 import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term, AccessoryType } from '../types';
@@ -41,6 +43,13 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       } catch (e) { console.error('Failed to fetch logs', e); }
   };
 
+  const clearLogs = async () => {
+      try {
+          const res = await fetch(`${API_URL}/api/logs`, { method: 'DELETE' });
+          if (res.ok) setLogs([]);
+      } catch (e) { console.error('Failed to clear logs', e); }
+  };
+
   // Initial Data Fetch
   useEffect(() => {
     const fetchData = async () => {
@@ -71,7 +80,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const devicesData = await safeJson(devicesRes);
         const simsData = await safeJson(simsRes);
         const usersData: User[] = await safeJson(usersRes);
-        const termsData: Term[] = await safeJson(termsRes, []); // Fallback not used due to throw, but standard
+        const termsData: Term[] = await safeJson(termsRes, []); 
         
         // Map terms into users structure
         const usersWithTerms = usersData.map(u => ({
@@ -133,8 +142,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!res.ok) throw new Error('Failed to delete');
   };
 
-  // --- CRUD Implementations ---
-
+  // --- CRUD Implementations --- (Same as original)
   const addDevice = async (device: Device, adminName: string) => {
     try {
       const saved = await postData('devices', { ...device, _adminUser: adminName });
@@ -189,10 +197,9 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const updatedUser = { ...user, active: !user.active };
     await putData('users', { ...updatedUser, _adminUser: adminName });
     setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
-    fetchLogs(); // Essential: Update logs to show "Inativação"/"Ativação" immediately
+    fetchLogs();
   };
 
-  // System Users
   const addSystemUser = async (user: SystemUser, adminName: string) => {
     const saved = await postData('system-users', { ...user, _adminUser: adminName });
     setSystemUsers(prev => [...prev, saved]);
@@ -211,7 +218,6 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     fetchLogs();
   };
 
-  // Settings
   const updateSettings = async (newSettings: SystemSettings, adminName: string) => {
       await fetch(`${API_URL}/api/settings`, {
           method: 'PUT',
@@ -222,14 +228,10 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       fetchLogs();
   };
 
-  // --- Operations Logic Updated to Create Terms ---
   const assignAsset = async (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string, termFile?: File) => {
-    // 1. Log Operation (Checkout)
     const payload = { assetId, assetType, userId, notes, action: 'CHECKOUT', _adminUser: adminName };
     await postData('operations/checkout', payload);
 
-    // 2. Create Term Record (Pending or Signed)
-    // We need asset name for term record
     let assetName = 'Equipamento';
     if (assetType === 'Device') {
         const d = devices.find(x => x.id === assetId);
@@ -241,16 +243,15 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     const termData: Term = {
-        id: Math.random().toString(36).substr(2, 9), // API should ideally generate ID, but we do it here for now
+        id: Math.random().toString(36).substr(2, 9),
         userId,
         type: 'ENTREGA',
         assetDetails: assetName,
         date: new Date().toISOString(),
-        fileUrl: termFile ? 'PENDING_UPLOAD' : '' // 'PENDING_UPLOAD' is just a placeholder logic, simpler is empty string if no file
+        fileUrl: termFile ? 'PENDING_UPLOAD' : ''
     };
 
     if (termFile) {
-        // Mocking the URL for prod demo (in real world, upload endpoint needed)
         termData.fileUrl = "signed_doc.pdf"; 
     } else {
         termData.fileUrl = "";
@@ -261,7 +262,6 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const returnAsset = async (assetType: 'Device' | 'Sim', assetId: string, notes: string, adminName: string, termFile?: File) => {
-    // Determine User before checkin
     let userId = '';
     let assetName = 'Equipamento';
     if (assetType === 'Device') {
@@ -275,11 +275,9 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         assetName = `Chip ${s?.phoneNumber}`;
     }
 
-    // 1. Log Operation
     const payload = { assetId, assetType, notes, action: 'CHECKIN', _adminUser: adminName };
     await postData('operations/checkin', payload);
 
-    // 2. Create Return Term Record
     if (userId) {
         const termData: Term = {
             id: Math.random().toString(36).substr(2, 9),
@@ -298,8 +296,6 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const getHistory = (assetId: string) => {
     return logs.filter(l => l.assetId === assetId);
   };
-
-  // --- New CRUD Implementations ---
 
   const addModel = async (model: DeviceModel, adminName: string) => {
       const saved = await postData('models', { ...model, _adminUser: adminName });
@@ -381,6 +377,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addSystemUser, updateSystemUser, deleteSystemUser,
     updateSettings,
     assignAsset, returnAsset, getHistory,
+    clearLogs, // New
     addModel, updateModel, deleteModel,
     addBrand, deleteBrand,
     addAssetType, deleteAssetType,

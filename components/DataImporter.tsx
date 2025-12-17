@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,7 +31,8 @@ const DataImporter = () => {
   // --- CSV TEMPLATES ---
   const getTemplateHeaders = () => {
       switch(importType) {
-          case 'USERS': return 'Nome Completo,Email,CPF,Cargo,Setor,RG,Endereco';
+          // ATUALIZADO: Reflete a UI (Função = Dropdown, Setor/Código = Texto)
+          case 'USERS': return 'Nome Completo,Email,CPF,Funcao (Dropdown),Setor/Codigo (Texto),RG,Endereco';
           case 'DEVICES': return 'Patrimonio(Tag),Serial,Modelo,Marca,Tipo,Status,Valor Compra,Data Compra(AAAA-MM-DD),IMEI';
           case 'SIMS': return 'Numero,Operadora,ICCID,Plano';
           default: return '';
@@ -140,16 +142,16 @@ const DataImporter = () => {
           throw new Error(`Usuário já existe (Email: ${email} ou CPF: ${cpf})`);
       }
 
-      // Resolve Sector (Find or Create)
+      // Resolve Sector (Find or Create) -> Mapeia para Dropdown "Função"
       let sectorId = '';
-      const sectorName = row['Setor'];
-      if (sectorName) {
-          const existingSector = sectors.find(s => s.name.toLowerCase() === sectorName.toLowerCase());
+      const funcaoName = row['Funcao (Dropdown)']; // Header atualizado
+      if (funcaoName) {
+          const existingSector = sectors.find(s => s.name.toLowerCase() === funcaoName.toLowerCase());
           if (existingSector) {
               sectorId = existingSector.id;
           } else {
               const newId = Math.random().toString(36).substr(2, 9);
-              addSector({ id: newId, name: sectorName }, adminName);
+              addSector({ id: newId, name: funcaoName }, adminName);
               sectorId = newId;
           }
       }
@@ -159,7 +161,7 @@ const DataImporter = () => {
           fullName: name,
           email: email,
           cpf: cpf || '',
-          jobTitle: row['Cargo'] || 'Não Informado',
+          jobTitle: row['Setor/Codigo (Texto)'] || 'Não Informado', // Header atualizado
           sectorId: sectorId,
           rg: row['RG'] || '',
           address: row['Endereco'] || '',

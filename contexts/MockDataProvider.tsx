@@ -1,3 +1,5 @@
+
+// ... existing imports
 import React, { useState } from 'react';
 import { DataContext, DataContextType } from './DataContext';
 import { Device, SimCard, User, AuditLog, DeviceStatus, ActionType, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term, AccessoryType } from '../types';
@@ -45,6 +47,12 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLogs(prev => [newLog, ...prev]);
   };
 
+  const clearLogs = () => {
+      setLogs([]);
+  };
+
+  // ... (rest of CRUD methods remain same as provided previously - devices, sims, etc) ...
+  
   // --- Devices ---
   const addDevice = (device: Device, adminName: string) => {
     setDevices(prev => [...prev, device]);
@@ -144,7 +152,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (user) logAction(ActionType.DELETE, 'System', id, user.name, adminName);
   };
 
-  // --- Settings (Updated to Persist in LocalStorage for Mock) ---
+  // --- Settings ---
   const updateSettings = (newSettings: SystemSettings, adminName: string) => {
     setSettings(newSettings);
     localStorage.setItem('mock_settings', JSON.stringify(newSettings));
@@ -205,10 +213,8 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // --- Operations (Assignments & Returns) ---
   const assignAsset = (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string, termFile?: File) => {
-    // 1. Prepare Term Object
     let assetNameForTerm = '';
 
-    // 2. Resolve Asset
     if (assetType === 'Device') {
       const dev = devices.find(d => d.id === assetId);
       const user = users.find(u => u.id === userId);
@@ -218,9 +224,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       setDevices(prev => prev.map(d => d.id === assetId ? { ...d, status: DeviceStatus.IN_USE, currentUserId: userId } : d));
       
-      // Log for Device
       if (dev) logAction(ActionType.CHECKOUT, 'Device', assetId, 'Ativo', adminName, `Entregue para: ${user?.fullName}. Obs: ${notes}`);
-      // Log for User (Duplicate for history view)
       if (user) logAction(ActionType.CHECKOUT, 'User', user.id, user.fullName, adminName, `Recebeu: ${assetNameForTerm}. Obs: ${notes}`);
       
     } else {
@@ -231,14 +235,12 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       
       setSims(prev => prev.map(s => s.id === assetId ? { ...s, status: DeviceStatus.IN_USE, currentUserId: userId } : s));
       
-      // Log for Sim
       if (sim) logAction(ActionType.CHECKOUT, 'Sim', assetId, sim.phoneNumber, adminName, `Entregue para: ${user?.fullName}. Obs: ${notes}`);
-      // Log for User
       if (user) logAction(ActionType.CHECKOUT, 'User', user.id, user.fullName, adminName, `Recebeu: ${assetNameForTerm}. Obs: ${notes}`);
     }
 
-    // 3. Save Term (Always create pending term if no file)
-    const fileUrl = termFile ? URL.createObjectURL(termFile) : ''; // Empty means Pending
+    // Save Term
+    const fileUrl = termFile ? URL.createObjectURL(termFile) : ''; 
     const newTerm: Term = {
         id: Math.random().toString(36).substr(2, 9),
         userId,
@@ -247,7 +249,6 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         date: new Date().toISOString(),
         fileUrl
     };
-    // Append term to user
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, terms: [...(u.terms || []), newTerm] } : u));
   };
 
@@ -279,7 +280,6 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (user) logAction(ActionType.CHECKIN, 'User', user.id, user.fullName, adminName, `Devolveu: ${assetNameForTerm}. Obs: ${notes}`);
     }
 
-    // Save Return Term (Always create)
     if (userId) {
         const fileUrl = termFile ? URL.createObjectURL(termFile) : '';
         const newTerm: Term = {
@@ -307,6 +307,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addSystemUser, updateSystemUser, deleteSystemUser,
     updateSettings,
     assignAsset, returnAsset, getHistory,
+    clearLogs, // New
     addAssetType, deleteAssetType,
     addBrand, deleteBrand,
     addModel, updateModel, deleteModel,

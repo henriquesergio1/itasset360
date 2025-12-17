@@ -1,3 +1,4 @@
+
 const express = require('express');
 const sql = require('mssql');
 const cors = require('cors');
@@ -152,7 +153,6 @@ app.get('/api/devices', async (req, res) => {
             FROM Devices
         `);
         
-        // Try fetching accessories, if table fails (migration issue), return empty
         let accessories = [];
         try {
             accessories = await query(`SELECT Id as id, DeviceId as deviceId, AccessoryTypeId as accessoryTypeId, Name as name FROM DeviceAccessories`);
@@ -160,7 +160,6 @@ app.get('/api/devices', async (req, res) => {
             console.warn('Could not fetch accessories:', e.message);
         }
         
-        // Merge
         const result = devices.map(d => ({
             ...d,
             accessories: accessories.filter(a => a.deviceId === d.id)
@@ -195,7 +194,6 @@ app.post('/api/devices', async (req, res) => {
                 VALUES (@Id, @ModelId, @SerialNumber, @AssetTag, @Imei, @PulsusId, @Status, @CurrentUserId, @SectorId, @CostCenter, @LinkedSimId, @PurchaseDate, @PurchaseCost, @InvoiceNumber, @Supplier)
             `);
         
-        // Handle Accessories
         if (d.accessories && d.accessories.length > 0) {
             for (const acc of d.accessories) {
                 await pool.request()
@@ -225,7 +223,6 @@ app.put('/api/devices/:id', async (req, res) => {
             .input('SectorId', sql.NVarChar, d.sectorId || null)
             .query(`UPDATE Devices SET ModelId=@ModelId, Status=@Status, CurrentUserId=@CurrentUserId, LinkedSimId=@LinkedSimId, SectorId=@SectorId WHERE Id=@Id`);
         
-        // Sync Accessories
         try {
             await pool.request().query(`DELETE FROM DeviceAccessories WHERE DeviceId='${req.params.id}'`);
             if (d.accessories && d.accessories.length > 0) {
@@ -238,9 +235,7 @@ app.put('/api/devices/:id', async (req, res) => {
                         .query(`INSERT INTO DeviceAccessories (Id, DeviceId, AccessoryTypeId, Name) VALUES (@Id, @DeviceId, @AccessoryTypeId, @Name)`);
                 }
             }
-        } catch(e) {
-            console.error('Accessory sync failed', e);
-        }
+        } catch(e) { console.error('Accessory sync failed', e); }
 
         await logAction(d.id, 'Device', 'Atualização', d._adminUser, `Atualização de cadastro (Tag: ${d.assetTag})`);
         res.json(d);
@@ -250,13 +245,12 @@ app.put('/api/devices/:id', async (req, res) => {
 app.delete('/api/devices/:id', async (req, res) => {
     try {
         await query(`DELETE FROM Devices WHERE Id = '${req.params.id}'`);
-        // Note: AdminUser is hard to get on DELETE without body, setting as 'System' or via query param if implemented.
         await logAction(req.params.id, 'Device', 'Exclusão', 'Sistema', 'Dispositivo removido'); 
         res.json({ success: true });
     } catch (err) { res.status(500).send(err.message); }
 });
 
-// 2. Sims
+// 2. Sims (Same as original)
 app.get('/api/sims', async (req, res) => {
     try {
         const data = await query(`SELECT Id as id, PhoneNumber as phoneNumber, Operator as operator, Iccid as iccid, PlanDetails as planDetails, Status as status, CurrentUserId as currentUserId FROM SimCards`);
@@ -308,7 +302,7 @@ app.delete('/api/sims/:id', async (req, res) => {
     } catch (err) { res.status(500).send(err.message); }
 });
 
-// 3. Users
+// 3. Users (Same as original)
 app.get('/api/users', async (req, res) => {
     try {
         const data = await query(`SELECT Id as id, FullName as fullName, Cpf as cpf, Rg as rg, Pis as pis, Address as address, Email as email, SectorId as sectorId, JobTitle as jobTitle, Active as active, HasPendingIssues as hasPendingIssues, PendingIssuesNote as pendingIssuesNote FROM Users`);
@@ -341,17 +335,12 @@ app.put('/api/users/:id', async (req, res) => {
     const u = req.body;
     try {
         const pool = await sql.connect(dbConfig);
-        
-        // 1. Fetch current state to compare (Detect Activation/Inactivation)
         let currentActive = null;
         try {
             const currentRes = await pool.request().query(`SELECT Active FROM Users WHERE Id = '${req.params.id}'`);
-            if (currentRes.recordset.length > 0) {
-                currentActive = currentRes.recordset[0].Active;
-            }
-        } catch(e) { console.error('Error fetching current user state', e); }
+            if (currentRes.recordset.length > 0) currentActive = currentRes.recordset[0].Active;
+        } catch(e) {}
 
-        // 2. Perform Update
         await pool.request()
             .input('Id', sql.NVarChar, req.params.id)
             .input('FullName', sql.NVarChar, u.fullName)
@@ -363,21 +352,14 @@ app.put('/api/users/:id', async (req, res) => {
             .input('PendingIssuesNote', sql.NVarChar, u.pendingIssuesNote || '')
             .query(`UPDATE Users SET FullName=@FullName, Email=@Email, SectorId=@SectorId, JobTitle=@JobTitle, Active=@Active, HasPendingIssues=@HasPendingIssues, PendingIssuesNote=@PendingIssuesNote WHERE Id=@Id`);
         
-        // 3. Determine precise log action
         let logActionType = 'Atualização';
         let logNotes = 'Dados atualizados';
-        
-        // Check for Status Change
         if (currentActive !== null && u.active !== undefined) {
-            const isCurrentlyActive = !!currentActive;
-            const willBeActive = !!u.active;
-            
-            if (isCurrentlyActive !== willBeActive) {
-                logActionType = willBeActive ? 'Ativação' : 'Inativação';
-                logNotes = willBeActive ? 'Colaborador reativado no sistema.' : 'Colaborador inativado.';
+            if (!!currentActive !== !!u.active) {
+                logActionType = !!u.active ? 'Ativação' : 'Inativação';
+                logNotes = !!u.active ? 'Colaborador reativado no sistema.' : 'Colaborador inativado.';
             }
         }
-        
         await logAction(u.id, 'User', logActionType, u._adminUser, logNotes);
         res.json(u);
     } catch (err) { res.status(500).send(err.message); }
@@ -452,6 +434,14 @@ app.get('/api/logs', async (req, res) => {
     } catch (err) { res.status(500).send(err.message); }
 });
 
+// --- NEW ROUTE: CLEAR LOGS ---
+app.delete('/api/logs', async (req, res) => {
+    try {
+        await query(`TRUNCATE TABLE AuditLogs`);
+        res.json({ success: true });
+    } catch (err) { res.status(500).send(err.message); }
+});
+
 app.get('/api/settings', async (req, res) => {
     try {
         const data = await query(`SELECT TOP 1 AppName as appName, Cnpj as cnpj, LogoUrl as logoUrl, TermTemplate as termTemplate, ReturnTermTemplate as returnTermTemplate FROM SystemSettings`);
@@ -485,253 +475,36 @@ app.put('/api/settings', async (req, res) => {
     } catch (err) { res.status(500).send(err.message); }
 });
 
-// --- NEW CRUD ROUTES ---
+// --- NEW CRUD ROUTES --- (Models, Brands, etc... Same as original)
+app.get('/api/models', async (req, res) => { try { const data = await query(`SELECT Id as id, Name as name, BrandId as brandId, TypeId as typeId, ImageUrl as imageUrl FROM Models`); res.json(data); } catch (err) { res.status(500).send(err.message); } });
+app.post('/api/models', async (req, res) => { const m = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, m.id).input('Name', sql.NVarChar, m.name).input('BrandId', sql.NVarChar, m.brandId).input('TypeId', sql.NVarChar, m.typeId).input('ImageUrl', sql.NVarChar, m.imageUrl || '').query(`INSERT INTO Models (Id, Name, BrandId, TypeId, ImageUrl) VALUES (@Id, @Name, @BrandId, @TypeId, @ImageUrl)`); await logAction(m.id, 'Model', 'Criação', m._adminUser, m.name); res.json(m); } catch (err) { res.status(500).send(err.message); } });
+app.put('/api/models/:id', async (req, res) => { const m = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, req.params.id).input('Name', sql.NVarChar, m.name).input('BrandId', sql.NVarChar, m.brandId).input('TypeId', sql.NVarChar, m.typeId).input('ImageUrl', sql.NVarChar, m.imageUrl || '').query(`UPDATE Models SET Name=@Name, BrandId=@BrandId, TypeId=@TypeId, ImageUrl=@ImageUrl WHERE Id=@Id`); await logAction(m.id, 'Model', 'Atualização', m._adminUser, m.name); res.json(m); } catch (err) { res.status(500).send(err.message); } });
+app.delete('/api/models/:id', async (req, res) => { try { await query(`DELETE FROM Models WHERE Id = '${req.params.id}'`); res.json({ success: true }); } catch (err) { res.status(500).send(err.message); } });
 
-// Models
-app.get('/api/models', async (req, res) => {
-    try {
-        const data = await query(`SELECT Id as id, Name as name, BrandId as brandId, TypeId as typeId, ImageUrl as imageUrl FROM Models`);
-        res.json(data);
-    } catch (err) { res.status(500).send(err.message); }
-});
+app.get('/api/brands', async (req, res) => { try { const data = await query(`SELECT Id as id, Name as name FROM Brands`); res.json(data); } catch (err) { res.status(500).send(err.message); } });
+app.post('/api/brands', async (req, res) => { const b = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, b.id).input('Name', sql.NVarChar, b.name).query(`INSERT INTO Brands (Id, Name) VALUES (@Id, @Name)`); await logAction(b.id, 'Brand', 'Criação', b._adminUser, b.name); res.json(b); } catch (err) { res.status(500).send(err.message); } });
+app.delete('/api/brands/:id', async (req, res) => { try { await query(`DELETE FROM Brands WHERE Id = '${req.params.id}'`); res.json({ success: true }); } catch (err) { res.status(500).send(err.message); } });
 
-app.post('/api/models', async (req, res) => {
-    const m = req.body;
-    try {
-        const pool = await sql.connect(dbConfig);
-        await pool.request()
-            .input('Id', sql.NVarChar, m.id)
-            .input('Name', sql.NVarChar, m.name)
-            .input('BrandId', sql.NVarChar, m.brandId)
-            .input('TypeId', sql.NVarChar, m.typeId)
-            .input('ImageUrl', sql.NVarChar, m.imageUrl || '')
-            .query(`INSERT INTO Models (Id, Name, BrandId, TypeId, ImageUrl) VALUES (@Id, @Name, @BrandId, @TypeId, @ImageUrl)`);
-        await logAction(m.id, 'Model', 'Criação', m._adminUser, m.name);
-        res.json(m);
-    } catch (err) { res.status(500).send(err.message); }
-});
+app.get('/api/asset-types', async (req, res) => { try { const data = await query(`SELECT Id as id, Name as name FROM AssetTypes`); res.json(data); } catch (err) { res.status(500).send(err.message); } });
+app.post('/api/asset-types', async (req, res) => { const t = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, t.id).input('Name', sql.NVarChar, t.name).query(`INSERT INTO AssetTypes (Id, Name) VALUES (@Id, @Name)`); await logAction(t.id, 'Type', 'Criação', t._adminUser, t.name); res.json(t); } catch (err) { res.status(500).send(err.message); } });
+app.delete('/api/asset-types/:id', async (req, res) => { try { await query(`DELETE FROM AssetTypes WHERE Id = '${req.params.id}'`); res.json({ success: true }); } catch (err) { res.status(500).send(err.message); } });
 
-app.put('/api/models/:id', async (req, res) => {
-    const m = req.body;
-    try {
-        const pool = await sql.connect(dbConfig);
-        await pool.request()
-            .input('Id', sql.NVarChar, req.params.id)
-            .input('Name', sql.NVarChar, m.name)
-            .input('BrandId', sql.NVarChar, m.brandId)
-            .input('TypeId', sql.NVarChar, m.typeId)
-            .input('ImageUrl', sql.NVarChar, m.imageUrl || '')
-            .query(`UPDATE Models SET Name=@Name, BrandId=@BrandId, TypeId=@TypeId, ImageUrl=@ImageUrl WHERE Id=@Id`);
-        await logAction(m.id, 'Model', 'Atualização', m._adminUser, m.name);
-        res.json(m);
-    } catch (err) { res.status(500).send(err.message); }
-});
+app.get('/api/accessory-types', async (req, res) => { try { const data = await query(`SELECT Id as id, Name as name FROM AccessoryTypes`); res.json(data); } catch (err) { res.status(500).send(err.message); } });
+app.post('/api/accessory-types', async (req, res) => { const t = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, t.id).input('Name', sql.NVarChar, t.name).query(`INSERT INTO AccessoryTypes (Id, Name) VALUES (@Id, @Name)`); await logAction(t.id, 'Type', 'Criação', t._adminUser, t.name); res.json(t); } catch (err) { res.status(500).send(err.message); } });
+app.delete('/api/accessory-types/:id', async (req, res) => { try { await query(`DELETE FROM AccessoryTypes WHERE Id = '${req.params.id}'`); res.json({ success: true }); } catch (err) { res.status(500).send(err.message); } });
 
-app.delete('/api/models/:id', async (req, res) => {
-    try {
-        await query(`DELETE FROM Models WHERE Id = '${req.params.id}'`);
-        res.json({ success: true });
-    } catch (err) { res.status(500).send(err.message); }
-});
+app.get('/api/sectors', async (req, res) => { try { const data = await query(`SELECT Id as id, Name as name FROM Sectors`); res.json(data); } catch (err) { res.status(500).send(err.message); } });
+app.post('/api/sectors', async (req, res) => { const s = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, s.id).input('Name', sql.NVarChar, s.name).query(`INSERT INTO Sectors (Id, Name) VALUES (@Id, @Name)`); await logAction(s.id, 'Sector', 'Criação', s._adminUser, s.name); res.json(s); } catch (err) { res.status(500).send(err.message); } });
+app.delete('/api/sectors/:id', async (req, res) => { try { await query(`DELETE FROM Sectors WHERE Id = '${req.params.id}'`); res.json({ success: true }); } catch (err) { res.status(500).send(err.message); } });
 
-// Brands
-app.get('/api/brands', async (req, res) => {
-    try {
-        const data = await query(`SELECT Id as id, Name as name FROM Brands`);
-        res.json(data);
-    } catch (err) { res.status(500).send(err.message); }
-});
+app.get('/api/system-users', async (req, res) => { try { const data = await query(`SELECT Id as id, Name as name, Email as email, Role as role, Password as password FROM SystemUsers`); res.json(data); } catch (err) { res.status(500).send(err.message); } });
+app.post('/api/system-users', async (req, res) => { const u = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, u.id).input('Name', sql.NVarChar, u.name).input('Email', sql.NVarChar, u.email).input('Password', sql.NVarChar, u.password).input('Role', sql.NVarChar, u.role).query(`INSERT INTO SystemUsers (Id, Name, Email, Password, Role) VALUES (@Id, @Name, @Email, @Password, @Role)`); await logAction(u.id, 'System', 'Criação', u._adminUser, u.name); res.json(u); } catch (err) { res.status(500).send(err.message); } });
+app.put('/api/system-users/:id', async (req, res) => { const u = req.body; try { const pool = await sql.connect(dbConfig); const request = pool.request().input('Id', sql.NVarChar, req.params.id).input('Name', sql.NVarChar, u.name).input('Email', sql.NVarChar, u.email).input('Role', sql.NVarChar, u.role); let queryStr = `UPDATE SystemUsers SET Name=@Name, Email=@Email, Role=@Role`; if (u.password) { request.input('Password', sql.NVarChar, u.password); queryStr += `, Password=@Password`; } queryStr += ` WHERE Id=@Id`; await request.query(queryStr); await logAction(u.id, 'System', 'Atualização', u._adminUser, u.name); res.json(u); } catch (err) { res.status(500).send(err.message); } });
+app.delete('/api/system-users/:id', async (req, res) => { try { await query(`DELETE FROM SystemUsers WHERE Id = '${req.params.id}'`); res.json({ success: true }); } catch (err) { res.status(500).send(err.message); } });
 
-app.post('/api/brands', async (req, res) => {
-    const b = req.body;
-    try {
-        const pool = await sql.connect(dbConfig);
-        await pool.request()
-            .input('Id', sql.NVarChar, b.id)
-            .input('Name', sql.NVarChar, b.name)
-            .query(`INSERT INTO Brands (Id, Name) VALUES (@Id, @Name)`);
-        await logAction(b.id, 'Brand', 'Criação', b._adminUser, b.name);
-        res.json(b);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.delete('/api/brands/:id', async (req, res) => {
-    try {
-        await query(`DELETE FROM Brands WHERE Id = '${req.params.id}'`);
-        res.json({ success: true });
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-// Asset Types
-app.get('/api/asset-types', async (req, res) => {
-    try {
-        const data = await query(`SELECT Id as id, Name as name FROM AssetTypes`);
-        res.json(data);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.post('/api/asset-types', async (req, res) => {
-    const t = req.body;
-    try {
-        const pool = await sql.connect(dbConfig);
-        await pool.request()
-            .input('Id', sql.NVarChar, t.id)
-            .input('Name', sql.NVarChar, t.name)
-            .query(`INSERT INTO AssetTypes (Id, Name) VALUES (@Id, @Name)`);
-        await logAction(t.id, 'Type', 'Criação', t._adminUser, t.name);
-        res.json(t);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.delete('/api/asset-types/:id', async (req, res) => {
-    try {
-        await query(`DELETE FROM AssetTypes WHERE Id = '${req.params.id}'`);
-        res.json({ success: true });
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-// NEW: Accessory Types
-app.get('/api/accessory-types', async (req, res) => {
-    try {
-        const data = await query(`SELECT Id as id, Name as name FROM AccessoryTypes`);
-        res.json(data);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.post('/api/accessory-types', async (req, res) => {
-    const t = req.body;
-    try {
-        const pool = await sql.connect(dbConfig);
-        await pool.request()
-            .input('Id', sql.NVarChar, t.id)
-            .input('Name', sql.NVarChar, t.name)
-            .query(`INSERT INTO AccessoryTypes (Id, Name) VALUES (@Id, @Name)`);
-        await logAction(t.id, 'Type', 'Criação', t._adminUser, t.name);
-        res.json(t);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.delete('/api/accessory-types/:id', async (req, res) => {
-    try {
-        await query(`DELETE FROM AccessoryTypes WHERE Id = '${req.params.id}'`);
-        res.json({ success: true });
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-// Sectors
-app.get('/api/sectors', async (req, res) => {
-    try {
-        const data = await query(`SELECT Id as id, Name as name FROM Sectors`);
-        res.json(data);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.post('/api/sectors', async (req, res) => {
-    const s = req.body;
-    try {
-        const pool = await sql.connect(dbConfig);
-        await pool.request()
-            .input('Id', sql.NVarChar, s.id)
-            .input('Name', sql.NVarChar, s.name)
-            .query(`INSERT INTO Sectors (Id, Name) VALUES (@Id, @Name)`);
-        await logAction(s.id, 'Sector', 'Criação', s._adminUser, s.name);
-        res.json(s);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.delete('/api/sectors/:id', async (req, res) => {
-    try {
-        await query(`DELETE FROM Sectors WHERE Id = '${req.params.id}'`);
-        res.json({ success: true });
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-// System Users
-app.get('/api/system-users', async (req, res) => {
-    try {
-        const data = await query(`SELECT Id as id, Name as name, Email as email, Role as role, Password as password FROM SystemUsers`);
-        res.json(data);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.post('/api/system-users', async (req, res) => {
-    const u = req.body;
-    try {
-        const pool = await sql.connect(dbConfig);
-        await pool.request()
-            .input('Id', sql.NVarChar, u.id)
-            .input('Name', sql.NVarChar, u.name)
-            .input('Email', sql.NVarChar, u.email)
-            .input('Password', sql.NVarChar, u.password)
-            .input('Role', sql.NVarChar, u.role)
-            .query(`INSERT INTO SystemUsers (Id, Name, Email, Password, Role) VALUES (@Id, @Name, @Email, @Password, @Role)`);
-        await logAction(u.id, 'System', 'Criação', u._adminUser, u.name);
-        res.json(u);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.put('/api/system-users/:id', async (req, res) => {
-    const u = req.body;
-    try {
-        const pool = await sql.connect(dbConfig);
-        const request = pool.request()
-            .input('Id', sql.NVarChar, req.params.id)
-            .input('Name', sql.NVarChar, u.name)
-            .input('Email', sql.NVarChar, u.email)
-            .input('Role', sql.NVarChar, u.role);
-        
-        let queryStr = `UPDATE SystemUsers SET Name=@Name, Email=@Email, Role=@Role`;
-        if (u.password) {
-            request.input('Password', sql.NVarChar, u.password);
-            queryStr += `, Password=@Password`;
-        }
-        queryStr += ` WHERE Id=@Id`;
-        
-        await request.query(queryStr);
-        await logAction(u.id, 'System', 'Atualização', u._adminUser, u.name);
-        res.json(u);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.delete('/api/system-users/:id', async (req, res) => {
-    try {
-        await query(`DELETE FROM SystemUsers WHERE Id = '${req.params.id}'`);
-        res.json({ success: true });
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-// Maintenances
-app.get('/api/maintenances', async (req, res) => {
-    try {
-        const data = await query(`SELECT Id as id, DeviceId as deviceId, Type as type, Date as date, Description as description, Cost as cost, Provider as provider FROM MaintenanceRecords`);
-        res.json(data);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.post('/api/maintenances', async (req, res) => {
-    const m = req.body;
-    try {
-        const pool = await sql.connect(dbConfig);
-        await pool.request()
-            .input('Id', sql.NVarChar, m.id)
-            .input('DeviceId', sql.NVarChar, m.deviceId)
-            .input('Type', sql.NVarChar, m.type)
-            .input('Date', sql.DateTime2, m.date)
-            .input('Description', sql.NVarChar, m.description)
-            .input('Cost', sql.Decimal(18,2), m.cost)
-            .input('Provider', sql.NVarChar, m.provider)
-            .query(`INSERT INTO MaintenanceRecords (Id, DeviceId, Type, Date, Description, Cost, Provider) VALUES (@Id, @DeviceId, @Type, @Date, @Description, @Cost, @Provider)`);
-        await logAction(m.deviceId, 'Device', 'Manutenção', m._adminUser, `Registro de manutenção: ${m.description}`);
-        res.json(m);
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-app.delete('/api/maintenances/:id', async (req, res) => {
-    try {
-        await query(`DELETE FROM MaintenanceRecords WHERE Id = '${req.params.id}'`);
-        res.json({ success: true });
-    } catch (err) { res.status(500).send(err.message); }
-});
+app.get('/api/maintenances', async (req, res) => { try { const data = await query(`SELECT Id as id, DeviceId as deviceId, Type as type, Date as date, Description as description, Cost as cost, Provider as provider FROM MaintenanceRecords`); res.json(data); } catch (err) { res.status(500).send(err.message); } });
+app.post('/api/maintenances', async (req, res) => { const m = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, m.id).input('DeviceId', sql.NVarChar, m.deviceId).input('Type', sql.NVarChar, m.type).input('Date', sql.DateTime2, m.date).input('Description', sql.NVarChar, m.description).input('Cost', sql.Decimal(18,2), m.cost).input('Provider', sql.NVarChar, m.provider).query(`INSERT INTO MaintenanceRecords (Id, DeviceId, Type, Date, Description, Cost, Provider) VALUES (@Id, @DeviceId, @Type, @Date, @Description, @Cost, @Provider)`); await logAction(m.deviceId, 'Device', 'Manutenção', m._adminUser, `Registro de manutenção: ${m.description}`); res.json(m); } catch (err) { res.status(500).send(err.message); } });
+app.delete('/api/maintenances/:id', async (req, res) => { try { await query(`DELETE FROM MaintenanceRecords WHERE Id = '${req.params.id}'`); res.json({ success: true }); } catch (err) { res.status(500).send(err.message); } });
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

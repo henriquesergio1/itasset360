@@ -1,13 +1,14 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { SystemUser, SystemRole, ActionType } from '../types';
-import { Shield, Settings, Activity, Trash2, Plus, X, Edit2, Save, Database, Server, FileCode, FileText, Bold, Italic, Heading1, List, Eye, ArrowLeftRight, UploadCloud, Info } from 'lucide-react';
+import { Shield, Settings, Activity, Trash2, Plus, X, Edit2, Save, Database, Server, FileCode, FileText, Bold, Italic, Heading1, List, Eye, ArrowLeftRight, UploadCloud, Info, AlertTriangle } from 'lucide-react';
 import DataImporter from './DataImporter';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
 const AdminPanel = () => {
-  const { systemUsers, addSystemUser, updateSystemUser, deleteSystemUser, settings, updateSettings, logs } = useData();
+  const { systemUsers, addSystemUser, updateSystemUser, deleteSystemUser, settings, updateSettings, logs, clearLogs } = useData();
   const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'USERS' | 'SETTINGS' | 'LOGS' | 'TEMPLATE' | 'IMPORT'>('USERS');
 
@@ -110,6 +111,13 @@ const AdminPanel = () => {
               [field]: value
           }
       }));
+  };
+
+  const handleClearLogs = () => {
+      if (window.confirm('PERIGO: Esta ação apagará PERMANENTEMENTE todo o histórico de auditoria e movimentações.\n\nDeseja realmente continuar?')) {
+          clearLogs();
+          alert('Histórico limpo com sucesso.');
+      }
   };
 
   // --- PREVIEW HANDLER ---
@@ -346,7 +354,7 @@ const AdminPanel = () => {
             {/* Data Source Settings */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-fit">
                 <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <Database size={20} className="text-blue-600"/> Fonte de Dados
+                    <Database size={20} className="text-blue-600"/> Fonte de Dados & Manutenção
                 </h3>
                 
                 <div className={`p-4 rounded-lg border mb-6 ${currentMode === 'prod' ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
@@ -365,13 +373,22 @@ const AdminPanel = () => {
                     </div>
                 </div>
 
-                <div className="border-t pt-6">
+                <div className="border-t pt-6 space-y-4">
                     <button 
                         onClick={toggleAppMode}
                         className={`w-full py-3 px-4 rounded-lg font-bold text-white transition-colors ${currentMode === 'mock' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-500 hover:bg-orange-600'}`}
                     >
                         {currentMode === 'mock' ? 'Mudar para Modo REAL (SQL Server)' : 'Mudar para Modo MOCK (Teste)'}
                     </button>
+
+                    <div className="pt-4 border-t">
+                        <button 
+                            onClick={handleClearLogs}
+                            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold text-red-600 border border-red-200 hover:bg-red-50 transition-colors"
+                        >
+                            <Trash2 size={18}/> Limpar Logs e Auditoria
+                        </button>
+                    </div>
                 </div>
             </div>
           </div>

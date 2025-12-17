@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext } from 'react';
 import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, AccessoryType } from '../types';
 
@@ -51,6 +52,9 @@ export interface DataContextType {
   assignAsset: (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string, termFile?: File) => void;
   returnAsset: (assetType: 'Device' | 'Sim', assetId: string, notes: string, adminName: string, termFile?: File, returnedChecklist?: Record<string, boolean>) => void;
   getHistory: (assetId: string) => AuditLog[];
+  
+  // Admin Tools
+  clearLogs: () => void;
 
   // --- Novos Métodos de Gestão (Configurações) ---
   addAssetType: (type: AssetType, adminName: string) => void;
