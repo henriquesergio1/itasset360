@@ -8,14 +8,25 @@ interface SystemInfoModalProps {
 
 const versions = [
     {
-    version: '1.8.2',
+    version: '1.8.4',
     date: 'Hoje',
-    title: 'Importação Avançada & Gestão de Notas',
+    title: 'Excel BR & Gestão de Manutenção',
     changes: [
-      'Corrigida importação de campos financeiros (Valor Pago, Fornecedor e Data de Compra).',
-      'Novos campos no importador: ID Pulsus, Setor Ativo e Centro de Custo.',
-      'Suporte a anexo de Notas de Serviço/Recibos em registros de manutenção de dispositivos.',
-      'Aprimorado mapeamento automático de colunas CSV para evitar perda de dados decimais e datas.'
+      'Modelo CSV alterado para ";" (ponto e vírgula) para compatibilidade nativa com Excel em Português.',
+      'Corrigida importação de ID Pulsus, Setor Ativo e Centro de Custo no fluxo de dispositivos.',
+      'Refinado tratamento financeiro no importador: limpeza de "R$" e pontos de milhar para evitar valores zerados.',
+      'Melhoria na tela de Manutenção: Adicionado campo específico para anexo/link de Nota de Serviço.',
+      'Flexibilização de identificação: O campo Patrimônio torna-se opcional se o IMEI for informado na importação.'
+    ]
+  },
+    {
+    version: '1.8.3',
+    date: '15/01/2025',
+    title: 'Correção Crítica de Importação',
+    changes: [
+      'Correção definitiva do modelo CSV: inclusão visual e lógica dos campos ID Pulsus, Setor Ativo e Centro de Custo.',
+      'Melhoria no tratamento de valores financeiros (conversão de vírgula para ponto e limpeza de R$).',
+      'Aprimorada a busca por correspondência de nomes de colunas no CSV para evitar campos vazios.'
     ]
   },
     {
@@ -25,29 +36,7 @@ const versions = [
     changes: [
       'Correção na importação CSV: O campo Patrimônio agora é opcional se o IMEI for fornecido (soberania do IMEI para dispositivos móveis).',
       'Detecção de duplicados aprimorada no importador (Tag OU IMEI).',
-      'Adicionada opção "Sincronizar Cadastro" no fluxo de entrega: permite que o ativo herde automaticamente o Setor/Cód. do colaborador.',
-      'Ajuste visual na lista de dispositivos para alertar divergências de setor entre Ativo e Usuário.'
-    ]
-  },
-  {
-    version: '1.8.0',
-    date: '10/01/2025',
-    title: 'Reestruturação de Dados de Colaborador',
-    changes: [
-      'Inversão semântica nos campos de colaborador.',
-      'O campo "Setor" (Dropdown) agora representa o "Cargo / Função" (Ex: Vendedor, TI).',
-      'O campo "Cargo" (Texto) agora representa o "Setor / Código Interno" digitável.',
-      'Ajustes nos filtros e labels para refletir a nova organização.'
-    ]
-  },
-    {
-    version: '1.7.7',
-    date: '15/11/2023',
-    title: 'Refinamento Jurídico',
-    changes: [
-      'Restauração das cláusulas completas e profissionais no Termo de Responsabilidade.',
-      'Melhoria na redação das condições de uso, segurança e devolução.',
-      'Manutenção da formatação compacta para impressão em página única.'
+      'Adicionada opção "Sincronizar Cadastro" no fluxo de entrega: permite que o ativo herde automaticamente o Setor/Cód. do colaborador.'
     ]
   },
   {
@@ -58,7 +47,6 @@ const versions = [
       'CRUD básico de Dispositivos.',
       'CRUD básico de Chips/SIMs.',
       'CRUD básico de Usuários.',
-      'Autenticação de sistema.',
       'Dashboard geral.'
     ]
   }
@@ -79,16 +67,13 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ onClose }) => {
             <X size={24} />
           </button>
           
-          {/* Decorative background element */}
           <div className="absolute -right-10 -top-10 text-slate-800 opacity-50">
              <GitCommit size={150} />
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-8">
           
-          {/* Developer Credit */}
           <div className="mb-8 bg-blue-50 border border-blue-100 rounded-xl p-5 flex items-center gap-4">
              <div className="bg-white p-3 rounded-full shadow-sm border border-blue-100">
                 <User size={24} className="text-blue-600"/>
@@ -107,7 +92,6 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ onClose }) => {
           <div className="relative border-l-2 border-slate-200 ml-3 space-y-8 pb-4">
             {versions.map((ver, index) => (
               <div key={index} className="relative pl-8">
-                {/* Timeline Dot */}
                 <div className={`absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-white shadow-sm 
                     ${index === 0 ? 'bg-blue-600 ring-4 ring-blue-100' : 'bg-slate-300'}`}>
                 </div>
@@ -137,7 +121,6 @@ const SystemInfoModal: React.FC<SystemInfoModalProps> = ({ onClose }) => {
 
         </div>
         
-        {/* Footer */}
         <div className="bg-slate-50 border-t px-8 py-4 text-center">
              <p className="text-xs text-slate-400">© 2025 IT Asset 360. Todos os direitos reservados.</p>
         </div>

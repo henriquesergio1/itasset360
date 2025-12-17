@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Device, DeviceStatus, MaintenanceRecord, MaintenanceType, ActionType, ReturnChecklist, DeviceAccessory } from '../types';
-import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid, Eye, AlertTriangle, HardDrive, SmartphoneNfc, Sliders, MapPin } from 'lucide-react';
+// Added missing 'Upload' import
+import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid, Eye, AlertTriangle, HardDrive, SmartphoneNfc, Sliders, MapPin, Upload } from 'lucide-react';
 import ModelSettings from './ModelSettings';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
@@ -143,7 +144,7 @@ const DeviceManager = () => {
                     <div className="text-gray-500">{d.costCenter || 'S/ Cód'}</div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${d.status === DeviceStatus.AVAILABLE ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{d.status}</span>
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${d.status === DeviceStatus.AVAILABLE ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-800'}`}>{d.status}</span>
                   </td>
                   <td className="px-6 py-4 text-xs font-medium text-gray-700">{user?.fullName || '-'}</td>
                   <td className="px-6 py-4 text-right">
@@ -188,18 +189,18 @@ const DeviceManager = () => {
                              <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'TAG'} onChange={() => setIdType('TAG')} /> Patrimônio</label>
                              <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'IMEI'} onChange={() => setIdType('IMEI')} /> IMEI (Móvel)</label>
                          </div>
-                         <input required className="w-full border rounded-lg p-2 font-mono text-sm" placeholder={idType === 'TAG' ? 'TAG-001' : 'IMEI 15 dígitos'} value={formData.assetTag || ''} onChange={e => setFormData({...formData, assetTag: e.target.value, imei: idType === 'IMEI' ? e.target.value : undefined})} />
+                         <input required className="w-full border rounded-lg p-2 font-mono text-sm" placeholder={idType === 'TAG' ? 'Patrimônio / Tag' : 'IMEI (15 dígitos)'} value={formData.assetTag || ''} onChange={e => setFormData({...formData, assetTag: e.target.value, imei: idType === 'IMEI' ? e.target.value : undefined})} />
                      </div>
                      <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Número de Série</label><input required className="w-full border rounded-lg p-2 text-sm" value={formData.serialNumber || ''} onChange={e => setFormData({...formData, serialNumber: e.target.value})}/></div>
                      <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">ID Pulsus (MDM)</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.pulsusId || ''} onChange={e => setFormData({...formData, pulsusId: e.target.value})}/></div>
                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Setor Atual</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Setor Atual do Ativo</label>
                         <select className="w-full border rounded-lg p-2 text-sm" value={formData.sectorId} onChange={e => setFormData({...formData, sectorId: e.target.value})}>
                             <option value="">Selecione...</option>
                             {sectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                      </div>
-                     <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Centro de Custo</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.costCenter || ''} onChange={e => setFormData({...formData, costCenter: e.target.value})}/></div>
+                     <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Centro de Custo / Cód Setor</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.costCenter || ''} onChange={e => setFormData({...formData, costCenter: e.target.value})}/></div>
                   </form>
                 )}
 
@@ -214,42 +215,53 @@ const DeviceManager = () => {
 
                 {activeTab === 'MAINTENANCE' && (
                     <div className="space-y-6">
-                        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                            <h4 className="font-bold text-orange-900 mb-3 flex items-center gap-2"><Wrench size={16}/> Nova Manutenção</h4>
-                            <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="bg-orange-50 p-5 rounded-xl border border-orange-100">
+                            <h4 className="font-bold text-orange-900 mb-4 flex items-center gap-2"><Wrench size={18}/> Novo Registro de Manutenção</h4>
+                            <div className="grid grid-cols-2 gap-4 mb-4">
                                 <div className="col-span-2">
-                                    <label className="block text-[10px] font-bold uppercase text-orange-700">Descrição</label>
-                                    <input className="w-full border rounded p-2 text-sm" placeholder="Ex: Troca de Bateria" value={newMaint.description || ''} onChange={e => setNewMaint({...newMaint, description: e.target.value})}/>
+                                    <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Descrição do Serviço</label>
+                                    <input className="w-full border rounded-lg p-2 text-sm" placeholder="Ex: Troca de Bateria, Manutenção Preventiva..." value={newMaint.description || ''} onChange={e => setNewMaint({...newMaint, description: e.target.value})}/>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-bold uppercase text-orange-700">Custo (R$)</label>
-                                    <input type="number" className="w-full border rounded p-2 text-sm" value={newMaint.cost} onChange={e => setNewMaint({...newMaint, cost: parseFloat(e.target.value)})}/>
+                                    <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Custo (R$)</label>
+                                    <input type="number" className="w-full border rounded-lg p-2 text-sm" value={newMaint.cost} onChange={e => setNewMaint({...newMaint, cost: parseFloat(e.target.value)})}/>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-bold uppercase text-orange-700">Prestador</label>
-                                    <input className="w-full border rounded p-2 text-sm" value={newMaint.provider || ''} onChange={e => setNewMaint({...newMaint, provider: e.target.value})}/>
+                                    <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Prestador</label>
+                                    <input className="w-full border rounded-lg p-2 text-sm" placeholder="Assistência XYZ" value={newMaint.provider || ''} onChange={e => setNewMaint({...newMaint, provider: e.target.value})}/>
                                 </div>
                                 <div className="col-span-2">
-                                    <label className="block text-[10px] font-bold uppercase text-orange-700">Nota de Serviço / Link NF</label>
+                                    <label className="block text-[10px] font-bold uppercase text-orange-700 mb-1">Anexar Nota de Serviço / Comprovante (Opcional)</label>
                                     <div className="flex gap-2">
-                                        <input className="flex-1 border rounded p-2 text-sm" placeholder="URL ou Caminho do arquivo" value={newMaint.invoiceUrl || ''} onChange={e => setNewMaint({...newMaint, invoiceUrl: e.target.value})}/>
-                                        <label className="bg-white border rounded px-3 flex items-center cursor-pointer hover:bg-gray-50"><Paperclip size={16}/><input type="file" className="hidden" onChange={e => setNewMaint({...newMaint, invoiceUrl: e.target.files?.[0]?.name})}/></label>
+                                        <div className="flex-1 relative">
+                                            <Paperclip className="absolute left-2.5 top-2.5 text-gray-400" size={16}/>
+                                            <input className="w-full border rounded-lg pl-9 p-2 text-sm" placeholder="URL da Nota ou Nome do arquivo" value={newMaint.invoiceUrl || ''} onChange={e => setNewMaint({...newMaint, invoiceUrl: e.target.value})}/>
+                                        </div>
+                                        <label className="bg-white border rounded-lg px-3 flex items-center cursor-pointer hover:bg-orange-100 transition-colors shadow-sm"><Upload size={16} className="text-orange-600"/><input type="file" className="hidden" onChange={e => setNewMaint({...newMaint, invoiceUrl: e.target.files?.[0]?.name})}/></label>
                                     </div>
                                 </div>
                             </div>
-                            <button onClick={handleAddMaintenance} className="w-full bg-orange-600 text-white py-2 rounded-lg font-bold hover:bg-orange-700 shadow-md">Salvar Registro</button>
+                            <button onClick={handleAddMaintenance} className="w-full bg-orange-600 text-white py-3 rounded-xl font-bold hover:bg-orange-700 shadow-lg transition-all">Salvar Manutenção</button>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-3">
+                            <h5 className="text-xs font-bold uppercase text-gray-400 flex items-center gap-1"><History size={14}/> Histórico de Manutenções</h5>
+                            {deviceMaintenances.length === 0 && <p className="text-sm text-gray-400 text-center py-4 italic">Nenhuma manutenção registrada.</p>}
                             {deviceMaintenances.map(m => (
-                                <div key={m.id} className="bg-white border p-3 rounded-lg flex justify-between items-center text-sm">
-                                    <div>
-                                        <div className="font-bold">{m.description}</div>
-                                        <div className="text-[10px] text-gray-400 uppercase">{new Date(m.date).toLocaleDateString()} • {m.provider}</div>
+                                <div key={m.id} className="bg-white border p-3 rounded-lg flex justify-between items-center text-sm shadow-sm">
+                                    <div className="flex-1">
+                                        <div className="font-bold text-gray-800">{m.description}</div>
+                                        <div className="text-[10px] text-gray-400 uppercase flex items-center gap-2">
+                                            {new Date(m.date).toLocaleDateString()} <span className="h-1 w-1 bg-gray-300 rounded-full"></span> {m.provider}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        {m.invoiceUrl && <a href="#" onClick={e => { e.preventDefault(); alert('Abrindo nota: ' + m.invoiceUrl); }} className="text-blue-600 hover:text-blue-800" title="Ver Nota"><Paperclip size={16}/></a>}
+                                    <div className="flex items-center gap-4 shrink-0">
+                                        {m.invoiceUrl && (
+                                            <button onClick={() => alert('Abrindo anexo: ' + m.invoiceUrl)} className="text-blue-600 flex items-center gap-1 hover:underline" title="Ver Comprovante">
+                                                <Paperclip size={14}/> <span className="text-[10px] font-bold">Nota</span>
+                                            </button>
+                                        )}
                                         <div className="font-bold text-gray-700">R$ {m.cost.toFixed(2)}</div>
-                                        <button onClick={() => deleteMaintenance(m.id, adminName)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
+                                        <button onClick={() => deleteMaintenance(m.id, adminName)} className="text-red-300 hover:text-red-500"><Trash2 size={16}/></button>
                                     </div>
                                 </div>
                             ))}
@@ -272,9 +284,9 @@ const DeviceManager = () => {
                 )}
             </div>
 
-            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 shrink-0">
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 shrink-0 border-t">
                 <button onClick={() => setIsModalOpen(false)} className="px-6 py-2 rounded-lg bg-gray-200 font-bold text-gray-700 hover:bg-gray-300">Fechar</button>
-                {['GENERAL', 'FINANCIAL'].includes(activeTab) && <button type="submit" form="devForm" className="px-6 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md">Salvar Dispositivo</button>}
+                {['GENERAL', 'FINANCIAL'].includes(activeTab) && <button type="submit" form="devForm" className="px-6 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md">Salvar Alterações</button>}
             </div>
           </div>
         </div>
