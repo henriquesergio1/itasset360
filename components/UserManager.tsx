@@ -19,6 +19,7 @@ const UserManager = () => {
   const [filterSectorId, setFilterSectorId] = useState(''); // New State for Sector Filter
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isViewOnly, setIsViewOnly] = useState(false); // New: View Only Mode
   const [isSectorModalOpen, setIsSectorModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'DATA' | 'ASSETS' | 'TERMS' | 'LOGS'>('DATA');
 
@@ -31,8 +32,10 @@ const UserManager = () => {
   const adminName = currentUser?.name || 'Unknown';
 
   // --- Helpers ---
-  const handleOpenModal = (user?: User) => {
+  const handleOpenModal = (user?: User, viewOnly: boolean = false) => {
     setActiveTab('DATA');
+    setIsViewOnly(viewOnly);
+    
     if (user) {
       setEditingId(user.id);
       setFormData(user);
@@ -45,6 +48,7 @@ const UserManager = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewOnly) return;
 
     // --- VALIDAÇÃO DE UNICIDADE (CPF E EMAIL) ---
     const cleanEmail = formData.email?.trim().toLowerCase();
@@ -185,6 +189,7 @@ const UserManager = () => {
   };
 
   const handleAttachFile = (termId: string, file: File) => {
+      if (isViewOnly) return;
       if (!editingId) return;
       
       const user = users.find(u => u.id === editingId);
@@ -324,7 +329,13 @@ const UserManager = () => {
                              )}
                          </div>
                          <div>
-                             <div className={`font-bold ${user.active ? 'text-gray-900' : 'text-gray-500'}`}>{user.fullName}</div>
+                             <div 
+                                onClick={() => handleOpenModal(user, true)}
+                                className={`font-bold cursor-pointer hover:underline ${user.active ? 'text-gray-900 hover:text-emerald-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                title="Ver Detalhes do Colaborador"
+                             >
+                                 {user.fullName}
+                             </div>
                              <div className="text-xs text-gray-400">{user.jobTitle}</div>
                          </div>
                       </div>
@@ -353,7 +364,7 @@ const UserManager = () => {
                     </td>
                     <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                             <button onClick={() => handleOpenModal(user)} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors" title="Editar / Detalhes">
+                             <button onClick={() => handleOpenModal(user)} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors" title="Editar">
                                  <Edit2 size={16} />
                              </button>
                              <button 
@@ -383,7 +394,9 @@ const UserManager = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="bg-slate-900 px-6 py-4 flex justify-between items-center shrink-0">
-              <h3 className="text-lg font-bold text-white">{editingId ? 'Editar Colaborador' : 'Novo Colaborador'}</h3>
+              <h3 className="text-lg font-bold text-white">
+                  {editingId ? (isViewOnly ? 'Detalhes do Colaborador' : 'Editar Colaborador') : 'Novo Colaborador'}
+              </h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white"><X size={20}/></button>
             </div>
 
@@ -406,38 +419,38 @@ const UserManager = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="md:col-span-2">
                           <label className="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
-                          <input required type="text" className="w-full border rounded-lg p-2" value={formData.fullName || ''} onChange={e => setFormData({...formData, fullName: e.target.value})} />
+                          <input disabled={isViewOnly} required type="text" className="w-full border rounded-lg p-2" value={formData.fullName || ''} onChange={e => setFormData({...formData, fullName: e.target.value})} />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
-                          <input required type="email" className="w-full border rounded-lg p-2" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} />
+                          <input disabled={isViewOnly} required type="email" className="w-full border rounded-lg p-2" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Cargo</label>
-                          <input required type="text" className="w-full border rounded-lg p-2" value={formData.jobTitle || ''} onChange={e => setFormData({...formData, jobTitle: e.target.value})} />
+                          <input disabled={isViewOnly} required type="text" className="w-full border rounded-lg p-2" value={formData.jobTitle || ''} onChange={e => setFormData({...formData, jobTitle: e.target.value})} />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Setor</label>
-                          <select className="w-full border rounded-lg p-2" value={formData.sectorId || ''} onChange={e => setFormData({...formData, sectorId: e.target.value})}>
+                          <select disabled={isViewOnly} className="w-full border rounded-lg p-2" value={formData.sectorId || ''} onChange={e => setFormData({...formData, sectorId: e.target.value})}>
                              <option value="">Selecione...</option>
                              {sectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                           </select>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">CPF</label>
-                          <input required type="text" className="w-full border rounded-lg p-2" value={formData.cpf || ''} onChange={e => setFormData({...formData, cpf: e.target.value})} />
+                          <input disabled={isViewOnly} required type="text" className="w-full border rounded-lg p-2" value={formData.cpf || ''} onChange={e => setFormData({...formData, cpf: e.target.value})} />
                         </div>
                          <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">RG</label>
-                          <input required type="text" className="w-full border rounded-lg p-2" value={formData.rg || ''} onChange={e => setFormData({...formData, rg: e.target.value})} />
+                          <input disabled={isViewOnly} required type="text" className="w-full border rounded-lg p-2" value={formData.rg || ''} onChange={e => setFormData({...formData, rg: e.target.value})} />
                         </div>
                          <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">PIS (Opcional)</label>
-                          <input type="text" className="w-full border rounded-lg p-2" value={formData.pis || ''} onChange={e => setFormData({...formData, pis: e.target.value})} />
+                          <input disabled={isViewOnly} type="text" className="w-full border rounded-lg p-2" value={formData.pis || ''} onChange={e => setFormData({...formData, pis: e.target.value})} />
                         </div>
                          <div className="md:col-span-2">
                           <label className="block text-sm font-medium text-gray-700 mb-1">Endereço Completo</label>
-                          <input type="text" className="w-full border rounded-lg p-2" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} />
+                          <input disabled={isViewOnly} type="text" className="w-full border rounded-lg p-2" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} />
                         </div>
                       </div>
                     </form>
@@ -536,10 +549,12 @@ const UserManager = () => {
 
                                         {/* View/Upload Action */}
                                         {isPending ? (
-                                            <label className="flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 cursor-pointer">
-                                                <Upload size={14}/> Anexar
-                                                <input type="file" className="hidden" accept=".pdf,.png,.jpg" onChange={(e) => e.target.files?.[0] && handleAttachFile(term.id, e.target.files[0])} />
-                                            </label>
+                                            !isViewOnly && (
+                                                <label className="flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 cursor-pointer">
+                                                    <Upload size={14}/> Anexar
+                                                    <input type="file" className="hidden" accept=".pdf,.png,.jpg" onChange={(e) => e.target.files?.[0] && handleAttachFile(term.id, e.target.files[0])} />
+                                                </label>
+                                            )
                                         ) : (
                                             <a href={term.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:underline px-2">
                                                 <CheckCircle size={14} className="text-green-500"/> Visualizar
@@ -598,7 +613,7 @@ const UserManager = () => {
 
             <div className="bg-gray-50 px-6 py-4 border-t flex justify-end gap-3 shrink-0">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">Fechar</button>
-                {activeTab === 'DATA' && (
+                {!isViewOnly && activeTab === 'DATA' && (
                     <button type="submit" form="userForm" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
                         {editingId ? 'Salvar Alterações' : 'Cadastrar'}
                     </button>

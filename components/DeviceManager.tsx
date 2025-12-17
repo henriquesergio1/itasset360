@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Device, DeviceStatus, MaintenanceRecord, MaintenanceType, ActionType, ReturnChecklist, DeviceAccessory } from '../types';
-import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid, Eye } from 'lucide-react';
 import ModelSettings from './ModelSettings';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
@@ -21,6 +21,7 @@ const DeviceManager = () => {
   const [viewStatus, setViewStatus] = useState<DeviceStatus | 'ALL'>('ALL'); // New: Status Tab State
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isViewOnly, setIsViewOnly] = useState(false); // New: View Only Mode
   const [isModelSettingsOpen, setIsModelSettingsOpen] = useState(false);
   const [isQuickOpOpen, setIsQuickOpOpen] = useState(false); // Quick Operation Modal
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false); // Bulk Edit Modal
@@ -176,8 +177,10 @@ const DeviceManager = () => {
 
   // --- Standard Handlers ---
 
-  const handleOpenModal = (device?: Device) => {
+  const handleOpenModal = (device?: Device, viewOnly: boolean = false) => {
     setActiveTab('GENERAL');
+    setIsViewOnly(viewOnly);
+    
     if (device) {
       setEditingId(device.id);
       setFormData({ ...device, accessories: device.accessories || [] });
@@ -201,6 +204,7 @@ const DeviceManager = () => {
 
   const handleDeviceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewOnly) return; // Guard clause
     
     // --- Validação Manual (Necessária pois o botão pode ser clicado fora do <form> na aba Acessórios) ---
     if (!formData.modelId) {
@@ -251,6 +255,7 @@ const DeviceManager = () => {
 
   // --- Accessory Management in Form ---
   const handleAddAccessory = () => {
+      if (isViewOnly) return;
       if (!selectedAccType) return;
       const accType = accessoryTypes.find(t => t.id === selectedAccType);
       if (!accType) return;
@@ -270,6 +275,7 @@ const DeviceManager = () => {
   };
 
   const handleRemoveAccessory = (accId: string) => {
+      if (isViewOnly) return;
       setFormData(prev => ({
           ...prev,
           accessories: prev.accessories?.filter(a => a.id !== accId)
@@ -277,6 +283,7 @@ const DeviceManager = () => {
   };
 
   const handleAddMaintenance = () => {
+    if (isViewOnly) return;
     if (!newMaint.description || !newMaint.cost) return;
     const record: MaintenanceRecord = {
         id: Math.random().toString(36).substr(2, 9),
@@ -507,7 +514,13 @@ const DeviceManager = () => {
                            {model?.imageUrl ? <img src={model.imageUrl} alt="" className="h-full w-full object-cover"/> : <ImageIcon size={20} className="text-gray-400"/>}
                         </div>
                         <div>
-                            <span className="font-medium text-gray-900 block">{model?.name || 'Modelo Desconhecido'}</span>
+                            <span 
+                                onClick={() => handleOpenModal(device, true)}
+                                className="font-medium text-gray-900 block cursor-pointer hover:text-blue-600 hover:underline"
+                                title="Ver Detalhes do Dispositivo"
+                            >
+                                {model?.name || 'Modelo Desconhecido'}
+                            </span>
                             <span className="text-xs text-gray-400 block">{brand?.name} • {type?.name}</span>
                         </div>
                       </div>
@@ -593,8 +606,8 @@ const DeviceManager = () => {
                                 <ExternalLink size={16} />
                             </a>
                         )}
-                        <button onClick={() => handleOpenModal(device)} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors"><Edit2 size={16} /></button>
-                        <button onClick={() => deleteDevice(device.id, adminName)} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><Trash2 size={16} /></button>
+                        <button onClick={() => handleOpenModal(device)} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors" title="Editar"><Edit2 size={16} /></button>
+                        <button onClick={() => deleteDevice(device.id, adminName)} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Excluir"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>
@@ -611,6 +624,7 @@ const DeviceManager = () => {
       {/* === BULK EDIT MODAL === */}
       {isBulkEditOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+              {/* ... (Existing Bulk Edit Modal) ... */}
               <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in">
                   <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
                       <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -709,6 +723,7 @@ const DeviceManager = () => {
       {/* === QUICK OPERATION MODAL === */}
       {isQuickOpOpen && quickOpDevice && (
           <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+              {/* ... (Existing Quick Op Modal) ... */}
               <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in">
                   <div className={`px-6 py-4 flex justify-between items-center ${quickOpType === 'CHECKOUT' ? 'bg-blue-600' : 'bg-orange-600'}`}>
                       <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -831,7 +846,9 @@ const DeviceManager = () => {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
             
             <div className="bg-slate-900 px-6 py-4 flex justify-between items-center shrink-0">
-              <h3 className="text-lg font-bold text-white">{editingId ? 'Editar Dispositivo' : 'Novo Dispositivo'}</h3>
+              <h3 className="text-lg font-bold text-white">
+                  {editingId ? (isViewOnly ? 'Detalhes do Dispositivo' : 'Editar Dispositivo') : 'Novo Dispositivo'}
+              </h3>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white"><X size={20}/></button>
             </div>
 
@@ -864,13 +881,13 @@ const DeviceManager = () => {
                            )}
                            <div className="flex-1">
                                <label className="block text-sm font-medium text-gray-700 mb-1">Modelo do Equipamento</label>
-                               <select required className="w-full border rounded-lg p-2" value={formData.modelId || ''} onChange={e => setFormData({...formData,modelId: e.target.value})}>
+                               <select required disabled={isViewOnly} className="w-full border rounded-lg p-2" value={formData.modelId || ''} onChange={e => setFormData({...formData,modelId: e.target.value})}>
                                    <option value="">Selecione o Modelo...</option>
                                    {models.map(m => (
                                        <option key={m.id} value={m.id}>{m.name} ({brands.find(b => b.id === m.brandId)?.name})</option>
                                    ))}
                                </select>
-                               <p className="text-xs text-gray-500 mt-1">Configure novos modelos no menu "Configurar Modelos".</p>
+                               {!isViewOnly && <p className="text-xs text-gray-500 mt-1">Configure novos modelos no menu "Configurar Modelos".</p>}
                            </div>
                         </div>
 
@@ -880,11 +897,11 @@ const DeviceManager = () => {
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Tipo de Identificação</label>
                                 <div className="flex gap-4 mb-3">
                                     <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-2 rounded border hover:border-blue-400 transition-colors">
-                                        <input type="radio" name="idType" checked={idType === 'TAG'} onChange={() => setIdType('TAG')} className="text-blue-600 focus:ring-blue-500" />
+                                        <input type="radio" name="idType" disabled={isViewOnly} checked={idType === 'TAG'} onChange={() => setIdType('TAG')} className="text-blue-600 focus:ring-blue-500" />
                                         <span className="text-sm font-medium text-gray-700">Hostname / Tag (Patrimônio)</span>
                                     </label>
                                     <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-2 rounded border hover:border-blue-400 transition-colors">
-                                        <input type="radio" name="idType" checked={idType === 'IMEI'} onChange={() => setIdType('IMEI')} className="text-blue-600 focus:ring-blue-500" />
+                                        <input type="radio" name="idType" disabled={isViewOnly} checked={idType === 'IMEI'} onChange={() => setIdType('IMEI')} className="text-blue-600 focus:ring-blue-500" />
                                         <span className="text-sm font-medium text-gray-700">IMEI (Dispositivo Móvel)</span>
                                     </label>
                                 </div>
@@ -895,6 +912,7 @@ const DeviceManager = () => {
                                     </label>
                                     <input 
                                         required 
+                                        disabled={isViewOnly}
                                         type="text" 
                                         className="w-full border rounded-lg p-2 font-mono text-gray-800" 
                                         value={formData.assetTag || ''} 
@@ -902,7 +920,7 @@ const DeviceManager = () => {
                                         maxLength={idType === 'IMEI' ? 15 : undefined}
                                         placeholder={idType === 'IMEI' ? 'Ex: 356988012345678' : 'Ex: NOTE-TI-001'}
                                     />
-                                    {idType === 'IMEI' && (
+                                    {idType === 'IMEI' && !isViewOnly && (
                                         <p className="text-xs text-blue-600 mt-1">O campo aceita apenas números.</p>
                                     )}
                                 </div>
@@ -910,14 +928,14 @@ const DeviceManager = () => {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Número de Série (SN)</label>
-                                <input required type="text" className="w-full border rounded-lg p-2" value={formData.serialNumber || ''} onChange={e => setFormData({...formData, serialNumber: e.target.value})} />
+                                <input required disabled={isViewOnly} type="text" className="w-full border rounded-lg p-2" value={formData.serialNumber || ''} onChange={e => setFormData({...formData, serialNumber: e.target.value})} />
                             </div>
                             
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
                                     <Tablet size={14}/> ID Pulsus (MDM)
                                 </label>
-                                <input type="text" className="w-full border rounded-lg p-2" value={formData.pulsusId || ''} onChange={e => setFormData({...formData, pulsusId: e.target.value})} placeholder="Ex: 10293" />
+                                <input type="text" disabled={isViewOnly} className="w-full border rounded-lg p-2" value={formData.pulsusId || ''} onChange={e => setFormData({...formData, pulsusId: e.target.value})} placeholder="Ex: 10293" />
                             </div>
 
                             <div className="col-span-2 border-t pt-2 mt-2">
@@ -925,21 +943,21 @@ const DeviceManager = () => {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Setor do Equipamento</label>
-                                        <select className="w-full border rounded-lg p-2" value={formData.sectorId || ''} onChange={e => setFormData({...formData, sectorId: e.target.value})}>
+                                        <select disabled={isViewOnly} className="w-full border rounded-lg p-2" value={formData.sectorId || ''} onChange={e => setFormData({...formData, sectorId: e.target.value})}>
                                             <option value="">Selecione o setor...</option>
                                             {sectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Código do Setor (Centro de Custo)</label>
-                                        <input type="text" className="w-full border rounded-lg p-2" value={formData.costCenter || ''} onChange={e => setFormData({...formData, costCenter: e.target.value})} placeholder="Ex: CC-1020" />
+                                        <input type="text" disabled={isViewOnly} className="w-full border rounded-lg p-2" value={formData.costCenter || ''} onChange={e => setFormData({...formData, costCenter: e.target.value})} placeholder="Ex: CC-1020" />
                                     </div>
                                 </div>
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                                <select className="w-full border rounded-lg p-2" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as DeviceStatus})}>
+                                <select disabled={isViewOnly} className="w-full border rounded-lg p-2" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as DeviceStatus})}>
                                     {Object.values(DeviceStatus).map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                             </div>
@@ -957,6 +975,7 @@ const DeviceManager = () => {
                                                 <Link size={14}/> Vincular Chip (SIM)
                                             </label>
                                             <select 
+                                                disabled={isViewOnly}
                                                 className="w-full border rounded-lg p-2"
                                                 value={formData.linkedSimId || ''}
                                                 onChange={e => setFormData({...formData, linkedSimId: e.target.value || null})}
@@ -978,17 +997,19 @@ const DeviceManager = () => {
                 {/* --- TAB: ACCESSORIES (NEW) --- */}
                 {activeTab === 'ACCESSORIES' && (
                     <div className="space-y-6">
-                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg">
-                            <h4 className="font-bold text-blue-900 mb-2">Adicionar Acessório</h4>
-                            <div className="flex gap-2">
-                                <select className="flex-1 border rounded-lg p-2" value={selectedAccType} onChange={e => setSelectedAccType(e.target.value)}>
-                                    <option value="">Selecione o tipo...</option>
-                                    {accessoryTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                </select>
-                                <button type="button" onClick={handleAddAccessory} className="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700"><Plus/></button>
+                        {!isViewOnly && (
+                            <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg">
+                                <h4 className="font-bold text-blue-900 mb-2">Adicionar Acessório</h4>
+                                <div className="flex gap-2">
+                                    <select className="flex-1 border rounded-lg p-2" value={selectedAccType} onChange={e => setSelectedAccType(e.target.value)}>
+                                        <option value="">Selecione o tipo...</option>
+                                        {accessoryTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                    <button type="button" onClick={handleAddAccessory} className="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700"><Plus/></button>
+                                </div>
+                                <p className="text-xs text-blue-600 mt-2">Use o menu "Configurar Modelos" para cadastrar novos tipos de acessórios.</p>
                             </div>
-                            <p className="text-xs text-blue-600 mt-2">Use o menu "Configurar Modelos" para cadastrar novos tipos de acessórios.</p>
-                        </div>
+                        )}
 
                         <div className="space-y-2">
                             {formData.accessories && formData.accessories.length > 0 ? (
@@ -998,7 +1019,7 @@ const DeviceManager = () => {
                                             <Plug size={18} className="text-gray-400"/>
                                             <span className="font-medium text-gray-800">{acc.name}</span>
                                         </div>
-                                        <button type="button" onClick={() => handleRemoveAccessory(acc.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={16}/></button>
+                                        {!isViewOnly && <button type="button" onClick={() => handleRemoveAccessory(acc.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={16}/></button>}
                                     </div>
                                 ))
                             ) : (
@@ -1014,32 +1035,34 @@ const DeviceManager = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Data da Compra</label>
-                                <input type="date" className="w-full border rounded-lg p-2" value={formData.purchaseDate || ''} onChange={e => setFormData({...formData, purchaseDate: e.target.value})} />
+                                <input disabled={isViewOnly} type="date" className="w-full border rounded-lg p-2" value={formData.purchaseDate || ''} onChange={e => setFormData({...formData, purchaseDate: e.target.value})} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Valor Pago (R$)</label>
-                                <input type="number" step="0.01" className="w-full border rounded-lg p-2" value={formData.purchaseCost || 0} onChange={e => setFormData({...formData, purchaseCost: parseFloat(e.target.value)})} />
+                                <input disabled={isViewOnly} type="number" step="0.01" className="w-full border rounded-lg p-2" value={formData.purchaseCost || 0} onChange={e => setFormData({...formData, purchaseCost: parseFloat(e.target.value)})} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label>
-                                <input type="text" className="w-full border rounded-lg p-2" value={formData.supplier || ''} onChange={e => setFormData({...formData, supplier: e.target.value})} />
+                                <input disabled={isViewOnly} type="text" className="w-full border rounded-lg p-2" value={formData.supplier || ''} onChange={e => setFormData({...formData, supplier: e.target.value})} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Nota Fiscal (Nº)</label>
-                                <input type="text" className="w-full border rounded-lg p-2" value={formData.invoiceNumber || ''} onChange={e => setFormData({...formData, invoiceNumber: e.target.value})} />
+                                <input disabled={isViewOnly} type="text" className="w-full border rounded-lg p-2" value={formData.invoiceNumber || ''} onChange={e => setFormData({...formData, invoiceNumber: e.target.value})} />
                             </div>
                         </div>
                         
-                        <div className="border-t pt-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Anexo da Nota Fiscal</label>
-                            <div className="flex items-center gap-3">
-                                <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-2">
-                                    <Paperclip size={16}/> Anexar Arquivo
-                                    <input type="file" className="hidden" onChange={() => alert('Em breve')} />
-                                </label>
-                                <span className="text-xs text-gray-400">PDF ou Imagem (Máx 5MB)</span>
+                        {!isViewOnly && (
+                            <div className="border-t pt-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Anexo da Nota Fiscal</label>
+                                <div className="flex items-center gap-3">
+                                    <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-2">
+                                        <Paperclip size={16}/> Anexar Arquivo
+                                        <input type="file" className="hidden" onChange={() => alert('Em breve')} />
+                                    </label>
+                                    <span className="text-xs text-gray-400">PDF ou Imagem (Máx 5MB)</span>
+                                </div>
                             </div>
-                        </div>
+                        )}
                      </div>
                 )}
 
@@ -1047,31 +1070,33 @@ const DeviceManager = () => {
                 {activeTab === 'MAINTENANCE' && (
                     <div className="space-y-6">
                         {/* New Maintenance Form */}
-                        <div className="bg-orange-50 p-4 rounded-lg border border-orange-100">
-                            <h4 className="font-bold text-orange-900 mb-3 text-sm">Registrar Nova Manutenção</h4>
-                            <div className="grid grid-cols-2 gap-3 mb-3">
-                                <div>
-                                    <label className="block text-xs font-semibold text-orange-800 mb-1">Tipo</label>
-                                    <select className="w-full border rounded p-2 text-sm" value={newMaint.type} onChange={e => setNewMaint({...newMaint, type: e.target.value as MaintenanceType})}>
-                                        <option value={MaintenanceType.CORRECTIVE}>Corretiva</option>
-                                        <option value={MaintenanceType.PREVENTIVE}>Preventiva</option>
-                                    </select>
+                        {!isViewOnly && (
+                            <div className="bg-orange-50 p-4 rounded-lg border border-orange-100">
+                                <h4 className="font-bold text-orange-900 mb-3 text-sm">Registrar Nova Manutenção</h4>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-orange-800 mb-1">Tipo</label>
+                                        <select className="w-full border rounded p-2 text-sm" value={newMaint.type} onChange={e => setNewMaint({...newMaint, type: e.target.value as MaintenanceType})}>
+                                            <option value={MaintenanceType.CORRECTIVE}>Corretiva</option>
+                                            <option value={MaintenanceType.PREVENTIVE}>Preventiva</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-orange-800 mb-1">Custo (R$)</label>
+                                        <input type="number" step="0.01" className="w-full border rounded p-2 text-sm" value={newMaint.cost} onChange={e => setNewMaint({...newMaint, cost: parseFloat(e.target.value)})}/>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-xs font-semibold text-orange-800 mb-1">Descrição do Serviço</label>
+                                        <input type="text" className="w-full border rounded p-2 text-sm" placeholder="Ex: Troca de Tela" value={newMaint.description || ''} onChange={e => setNewMaint({...newMaint, description: e.target.value})}/>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-xs font-semibold text-orange-800 mb-1">Prestador de Serviço</label>
+                                        <input type="text" className="w-full border rounded p-2 text-sm" placeholder="Nome da Assistência" value={newMaint.provider || ''} onChange={e => setNewMaint({...newMaint, provider: e.target.value})}/>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-orange-800 mb-1">Custo (R$)</label>
-                                    <input type="number" step="0.01" className="w-full border rounded p-2 text-sm" value={newMaint.cost} onChange={e => setNewMaint({...newMaint, cost: parseFloat(e.target.value)})}/>
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-semibold text-orange-800 mb-1">Descrição do Serviço</label>
-                                    <input type="text" className="w-full border rounded p-2 text-sm" placeholder="Ex: Troca de Tela" value={newMaint.description || ''} onChange={e => setNewMaint({...newMaint, description: e.target.value})}/>
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-semibold text-orange-800 mb-1">Prestador de Serviço</label>
-                                    <input type="text" className="w-full border rounded p-2 text-sm" placeholder="Nome da Assistência" value={newMaint.provider || ''} onChange={e => setNewMaint({...newMaint, provider: e.target.value})}/>
-                                </div>
+                                <button type="button" onClick={handleAddMaintenance} className="w-full bg-orange-600 text-white py-2 rounded text-sm font-bold hover:bg-orange-700">Adicionar Registro</button>
                             </div>
-                            <button type="button" onClick={handleAddMaintenance} className="w-full bg-orange-600 text-white py-2 rounded text-sm font-bold hover:bg-orange-700">Adicionar Registro</button>
-                        </div>
+                        )}
 
                         {/* List */}
                         <div className="space-y-3">
@@ -1086,7 +1111,7 @@ const DeviceManager = () => {
                                     </div>
                                     <div className="text-right">
                                         <div className="font-bold text-gray-900">R$ {m.cost.toFixed(2)}</div>
-                                        <button type="button" onClick={() => deleteMaintenance(m.id, adminName)} className="text-red-500 text-xs hover:underline mt-2">Excluir</button>
+                                        {!isViewOnly && <button type="button" onClick={() => deleteMaintenance(m.id, adminName)} className="text-red-500 text-xs hover:underline mt-2">Excluir</button>}
                                     </div>
                                 </div>
                             ))}
@@ -1131,7 +1156,7 @@ const DeviceManager = () => {
             {/* Modal Footer */}
             <div className="bg-gray-50 px-6 py-4 border-t flex justify-end gap-3 shrink-0">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300">Fechar</button>
-                {['GENERAL', 'ACCESSORIES', 'FINANCIAL'].includes(activeTab) && (
+                {!isViewOnly && ['GENERAL', 'ACCESSORIES', 'FINANCIAL'].includes(activeTab) && (
                     <button 
                         type={activeTab === 'GENERAL' ? "submit" : "button"} 
                         form={activeTab === 'GENERAL' ? "deviceForm" : undefined}
