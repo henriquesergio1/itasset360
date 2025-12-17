@@ -8,24 +8,25 @@ interface SystemInfoModalProps {
 
 const versions = [
     {
-    version: '1.9.0',
+    version: '1.9.1',
     date: 'Hoje',
-    title: 'Inteligência de Importação & Ciclo de Vida',
+    title: 'Edição em Massa Multi-Campos',
     changes: [
-      'Normalização inteligente de Status no importador: Aceita "disponivel", "conserto", "descarte" e variações sem acento.',
-      'Corrigida URL oficial do MDM Pulsus para https://app.pulsus.mobi/devices/.',
-      'Restauradas Ações em Massa (Bulk Actions) para alteração de Status e Exclusão em lote.',
-      'Adicionada alteração manual de Status (Manutenção/Descarte) no modal de edição do dispositivo.',
-      'Melhorado o sistema de filtragem por abas de status na listagem de inventário.'
+      'Restaurada funcionalidade completa de Atualização em Massa para Dispositivos: edite Status, Modelo, Setor ou Centro de Custo de uma só vez.',
+      'Normalização profunda de Status na importação: Interpreta variações como "disponivel", "em uso", "manutencao" ignorando acentos e caixa alta/baixa.',
+      'Corrigida URL definitiva do MDM Pulsus: https://app.pulsus.mobi/devices/.',
+      'Ativada aba de Status "Descartado" para visualização rápida de ativos obsoletos.',
+      'Melhorada a lógica de seleção de itens ao trocar de abas ou realizar buscas.'
     ]
   },
     {
-    version: '1.8.9',
-    date: '25/01/2025',
-    title: 'Bulk Actions & Correção MDM',
+    version: '1.9.0',
+    date: '26/01/2025',
+    title: 'Inteligência de Importação & Ciclo de Vida',
     changes: [
-      'Implementada barra de ações flutuante para exclusão e alteração de status em lote.',
-      'Adicionada coluna de seleção múltipla com checkbox no cabeçalho da tabela.'
+      'Normalização inteligente de Status no importador.',
+      'Adicionada alteração manual de Status (Manutenção/Descarte) no modal de edição do dispositivo.',
+      'Melhorado o sistema de filtragem por abas de status na listagem de inventário.'
     ]
   },
   {

@@ -38,16 +38,17 @@ const DataImporter = () => {
 
   const adminName = currentUser?.name || 'Importador';
 
-  // --- NORMALIZAÇÃO DE STATUS ---
+  // --- NORMALIZAÇÃO DE STATUS (COMPLETA) ---
   const mapStatus = (raw: string): DeviceStatus => {
       if (!raw) return DeviceStatus.AVAILABLE;
       
+      // Remove acentos e converte para minúsculas
       const clean = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
       
-      if (clean === 'disponivel' || clean === 'estoque' || clean === 'liberado') return DeviceStatus.AVAILABLE;
-      if (clean === 'em uso' || clean === 'uso' || clean === 'atribuido') return DeviceStatus.IN_USE;
-      if (clean === 'manutencao' || clean === 'conserto' || clean === 'reparo') return DeviceStatus.MAINTENANCE;
-      if (clean === 'descarte' || clean === 'descartado' || clean === 'sucata' || clean === 'baixado') return DeviceStatus.RETIRED;
+      if (['disponivel', 'estoque', 'liberado', 'vago', 'livre'].includes(clean)) return DeviceStatus.AVAILABLE;
+      if (['em uso', 'uso', 'atribuido', 'vinculado', 'utilizacao'].includes(clean)) return DeviceStatus.IN_USE;
+      if (['manutencao', 'conserto', 'reparo', 'assistencia', 'estragado', 'defeito'].includes(clean)) return DeviceStatus.MAINTENANCE;
+      if (['descarte', 'descartado', 'sucata', 'baixado', 'excluido', 'lixo', 'quebrado'].includes(clean)) return DeviceStatus.RETIRED;
       
       return DeviceStatus.AVAILABLE; // Fallback
   };
@@ -257,9 +258,9 @@ const DataImporter = () => {
         <div className="mb-6 flex justify-between items-start">
             <div>
                 <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                    <Database className="text-blue-600"/> Importador Inteligente (v1.9.0)
+                    <Database className="text-blue-600"/> Importador Inteligente (v1.9.1)
                 </h3>
-                <p className="text-sm text-gray-500">Mapeamento flexível de Status e Colunas.</p>
+                <p className="text-sm text-gray-500">Mapeamento estrito de Status e Colunas.</p>
             </div>
             {step !== 'UPLOAD' && (
                 <button onClick={() => setStep('UPLOAD')} className="text-sm text-blue-600 hover:underline flex items-center gap-1 font-bold">
@@ -288,7 +289,7 @@ const DataImporter = () => {
                         </label>
                     </div>
                     <div className="text-[11px] text-gray-400 text-center space-y-1">
-                        <p className="flex items-center justify-center gap-1 font-bold text-orange-600"><AlertCircle size={12}/> O Status agora ignora acentos (ex: disponivel = Disponível).</p>
+                        <p className="flex items-center justify-center gap-1 font-bold text-orange-600"><AlertCircle size={12}/> O Status ignora acentos e caixa (ex: DISPONIVEL = Disponível).</p>
                         <p>O motor de importação agora garante que um dado não sobrescreva o outro indevidamente.</p>
                     </div>
                 </div>
@@ -323,7 +324,7 @@ const DataImporter = () => {
                                     </td>
                                     <td className="px-6 py-3 text-gray-500">
                                         {item.errorMsg ? <span className="text-red-600 font-bold flex items-center gap-1"><AlertTriangle size={12}/> {item.errorMsg}</span> : 
-                                         item.status === 'CONFLICT' ? `Mapeado para: ${mapStatus(item.row['Status'])}` : `Pronto para importar como ${item.row['Tipo']}`}
+                                         item.status === 'CONFLICT' ? `Status Identificado: ${mapStatus(item.row['Status'])}` : `Pronto para importar como ${item.row['Tipo']}`}
                                     </td>
                                 </tr>
                             ))}

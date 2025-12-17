@@ -32,8 +32,8 @@ const DeviceManager = () => {
   // Selection & Bulk Actions
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [bulkAction, setBulkAction] = useState<'STATUS' | 'DELETE'>('STATUS');
-  const [bulkStatus, setBulkStatus] = useState<DeviceStatus>(DeviceStatus.AVAILABLE);
+  const [bulkField, setBulkField] = useState<'STATUS' | 'MODEL' | 'SECTOR' | 'COST_CENTER' | 'DELETE'>('STATUS');
+  const [bulkValue, setBulkValue] = useState<string>('');
 
   const [formData, setFormData] = useState<Partial<Device>>({ status: DeviceStatus.AVAILABLE, accessories: [], customData: {} });
   const [idType, setIdType] = useState<'TAG' | 'IMEI'>('TAG');
@@ -74,19 +74,31 @@ const DeviceManager = () => {
   // --- BULK ACTIONS ---
   const handleExecuteBulkAction = () => {
     const ids = Array.from(selectedDevices);
-    if (bulkAction === 'STATUS') {
-      ids.forEach(id => {
-        const dev = devices.find(d => d.id === id);
-        if (dev) updateDevice({ ...dev, status: bulkStatus }, adminName);
-      });
-    } else if (bulkAction === 'DELETE') {
+    
+    if (bulkField === 'DELETE') {
       if (!deleteReason.trim()) return alert('Informe o motivo para a exclusão em massa.');
       ids.forEach(id => deleteDevice(id, adminName, deleteReason));
+    } else {
+      if (!bulkValue && bulkField !== 'COST_CENTER') return alert('Selecione um valor para aplicar.');
+      
+      ids.forEach(id => {
+        const dev = devices.find(d => d.id === id);
+        if (dev) {
+            const updatedDev = { ...dev };
+            if (bulkField === 'STATUS') updatedDev.status = bulkValue as DeviceStatus;
+            if (bulkField === 'MODEL') updatedDev.modelId = bulkValue;
+            if (bulkField === 'SECTOR') updatedDev.sectorId = bulkValue;
+            if (bulkField === 'COST_CENTER') updatedDev.costCenter = bulkValue;
+            
+            updateDevice(updatedDev, adminName);
+        }
+      });
     }
     
     setSelectedDevices(new Set());
     setIsBulkModalOpen(false);
     setDeleteReason('');
+    setBulkValue('');
   };
 
   const handleAddMaintenance = () => {
@@ -298,16 +310,16 @@ const DeviceManager = () => {
               
               <div className="flex items-center gap-2">
                   <button 
-                    onClick={() => { setBulkAction('STATUS'); setIsBulkModalOpen(true); }}
-                    className="flex items-center gap-2 px-4 py-2 hover:bg-slate-800 rounded-lg transition-colors text-sm font-medium text-blue-400"
+                    onClick={() => { setBulkField('STATUS'); setIsBulkModalOpen(true); }}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-slate-800 rounded-lg transition-colors text-xs font-bold text-blue-400"
                   >
-                      <RefreshCw size={16}/> Alterar Status
+                      <RefreshCw size={14}/> Alterar Massa
                   </button>
                   <button 
-                    onClick={() => { setBulkAction('DELETE'); setIsBulkModalOpen(true); }}
-                    className="flex items-center gap-2 px-4 py-2 hover:bg-red-900/30 rounded-lg transition-colors text-sm font-medium text-red-400"
+                    onClick={() => { setBulkField('DELETE'); setIsBulkModalOpen(true); }}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-red-900/30 rounded-lg transition-colors text-xs font-bold text-red-400"
                   >
-                      <Trash2 size={16}/> Excluir Lote
+                      <Trash2 size={14}/> Excluir Lote
                   </button>
               </div>
 
@@ -320,40 +332,75 @@ const DeviceManager = () => {
           </div>
       )}
 
-      {/* --- MODAL DE AÇÃO EM MASSA --- */}
+      {/* --- MODAL DE AÇÃO EM MASSA (RESTAURADO COM MULTI-CAMPOS) --- */}
       {isBulkModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-60 z-[110] flex items-center justify-center p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
                   <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
-                      <h3 className="font-bold">{bulkAction === 'STATUS' ? 'Alterar Status do Lote' : 'Excluir Lote Selecionado'}</h3>
+                      <h3 className="font-bold">{bulkField === 'DELETE' ? 'Excluir Lote Selecionado' : 'Atualização em Massa'}</h3>
                       <button onClick={() => setIsBulkModalOpen(false)}><X size={20}/></button>
                   </div>
                   <div className="p-6 space-y-4">
-                      {bulkAction === 'STATUS' ? (
-                          <div>
-                              <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Novo Status para {selectedDevices.size} itens</label>
-                              <select 
-                                className="w-full border rounded-lg p-2.5"
-                                value={bulkStatus}
-                                onChange={(e) => setBulkStatus(e.target.value as DeviceStatus)}
-                              >
-                                  <option value={DeviceStatus.AVAILABLE}>{DeviceStatus.AVAILABLE}</option>
-                                  <option value={DeviceStatus.MAINTENANCE}>{DeviceStatus.MAINTENANCE}</option>
-                                  <option value={DeviceStatus.RETIRED}>{DeviceStatus.RETIRED}</option>
-                              </select>
+                      {bulkField !== 'DELETE' ? (
+                          <div className="space-y-4">
+                              <div>
+                                  <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">1. Escolha o Campo para Alterar</label>
+                                  <select 
+                                    className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50"
+                                    value={bulkField}
+                                    onChange={(e) => { setBulkField(e.target.value as any); setBulkValue(''); }}
+                                  >
+                                      <option value="STATUS">Status Operacional</option>
+                                      <option value="MODEL">Modelo do Equipamento</option>
+                                      <option value="SECTOR">Setor de Alocação</option>
+                                      <option value="COST_CENTER">Centro de Custo / Cód Setor</option>
+                                  </select>
+                              </div>
+
+                              <div>
+                                  <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">2. Novo Valor para {selectedDevices.size} itens</label>
+                                  {bulkField === 'STATUS' && (
+                                      <select className="w-full border rounded-lg p-2.5 text-sm" value={bulkValue} onChange={e => setBulkValue(e.target.value)}>
+                                          <option value="">Selecione...</option>
+                                          <option value={DeviceStatus.AVAILABLE}>{DeviceStatus.AVAILABLE}</option>
+                                          <option value={DeviceStatus.MAINTENANCE}>{DeviceStatus.MAINTENANCE}</option>
+                                          <option value={DeviceStatus.RETIRED}>{DeviceStatus.RETIRED}</option>
+                                      </select>
+                                  )}
+                                  {bulkField === 'MODEL' && (
+                                      <select className="w-full border rounded-lg p-2.5 text-sm" value={bulkValue} onChange={e => setBulkValue(e.target.value)}>
+                                          <option value="">Selecione o Modelo...</option>
+                                          {models.map(m => <option key={m.id} value={m.id}>{m.name} ({brands.find(b => b.id === m.brandId)?.name})</option>)}
+                                      </select>
+                                  )}
+                                  {bulkField === 'SECTOR' && (
+                                      <select className="w-full border rounded-lg p-2.5 text-sm" value={bulkValue} onChange={e => setBulkValue(e.target.value)}>
+                                          <option value="">Selecione o Setor...</option>
+                                          {sectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                      </select>
+                                  )}
+                                  {bulkField === 'COST_CENTER' && (
+                                      <input 
+                                        className="w-full border rounded-lg p-2.5 text-sm" 
+                                        placeholder="Digite o novo centro de custo..." 
+                                        value={bulkValue} 
+                                        onChange={e => setBulkValue(e.target.value)}
+                                      />
+                                  )}
+                              </div>
                           </div>
                       ) : (
                           <div className="space-y-4">
                               <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-start gap-3 border border-red-100">
                                   <AlertTriangle className="shrink-0 mt-0.5" size={18}/>
-                                  <p className="text-sm font-medium">Atenção: Você está excluindo {selectedDevices.size} dispositivos simultaneamente.</p>
+                                  <p className="text-sm font-medium">Atenção: Você está excluindo {selectedDevices.size} ativos permanentemente.</p>
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Motivo da Exclusão (Obrigatório)</label>
                                   <textarea 
                                       className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-red-500 outline-none" 
                                       rows={3} 
-                                      placeholder="Ex: Renovação de Parque, Lote Defeituoso..."
+                                      placeholder="Ex: Renovação de Parque..."
                                       value={deleteReason}
                                       onChange={(e) => setDeleteReason(e.target.value)}
                                   ></textarea>
@@ -365,10 +412,10 @@ const DeviceManager = () => {
                           <button onClick={() => setIsBulkModalOpen(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">Cancelar</button>
                           <button 
                               onClick={handleExecuteBulkAction} 
-                              disabled={bulkAction === 'DELETE' && !deleteReason.trim()}
-                              className={`flex-1 py-2 rounded-lg text-white font-bold transition-all ${bulkAction === 'DELETE' && !deleteReason.trim() ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                              disabled={(bulkField === 'DELETE' && !deleteReason.trim()) || (bulkField !== 'DELETE' && bulkField !== 'COST_CENTER' && !bulkValue)}
+                              className={`flex-1 py-2 rounded-lg text-white font-bold transition-all ${(bulkField === 'DELETE' && !deleteReason.trim()) || (bulkField !== 'DELETE' && bulkField !== 'COST_CENTER' && !bulkValue) ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                           >
-                              {bulkAction === 'STATUS' ? 'Aplicar Mudança' : 'Confirmar Exclusão'}
+                              {bulkField === 'DELETE' ? 'Confirmar Exclusão' : 'Aplicar em Lote'}
                           </button>
                       </div>
                   </div>
