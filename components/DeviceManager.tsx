@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Device, DeviceStatus, MaintenanceRecord, MaintenanceType, ActionType, ReturnChecklist, DeviceAccessory, AssetType, CustomField } from '../types';
-import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid, Eye, AlertTriangle, HardDrive, SmartphoneNfc, Sliders, MapPin, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Smartphone, Monitor, Settings, Image as ImageIcon, FileText, Wrench, DollarSign, Paperclip, Link, Unlink, History, ArrowRight, Tablet, Hash, ScanBarcode, ExternalLink, ArrowUpRight, ArrowDownLeft, CheckSquare, Printer, CheckCircle, Plug, X, Layers, Square, Copy, Box, Ban, LayoutGrid, Eye, AlertTriangle, HardDrive, SmartphoneNfc, Sliders, MapPin, Upload, Check, ChevronRight, RefreshCw } from 'lucide-react';
 import ModelSettings from './ModelSettings';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
@@ -17,6 +17,7 @@ const DeviceManager = () => {
   } = useData();
   const { user: currentUser } = useAuth();
   
+  // UI States
   const [searchTerm, setSearchTerm] = useState('');
   const [viewStatus, setViewStatus] = useState<DeviceStatus | 'ALL'>('ALL'); 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -27,6 +28,13 @@ const DeviceManager = () => {
   const [isModelSettingsOpen, setIsModelSettingsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'ACCESSORIES' | 'FINANCIAL' | 'MAINTENANCE' | 'HISTORY'>('GENERAL');
+  
+  // Selection & Bulk Actions
+  const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkAction, setBulkAction] = useState<'STATUS' | 'DELETE'>('STATUS');
+  const [bulkStatus, setBulkStatus] = useState<DeviceStatus>(DeviceStatus.AVAILABLE);
+
   const [formData, setFormData] = useState<Partial<Device>>({ status: DeviceStatus.AVAILABLE, accessories: [], customData: {} });
   const [idType, setIdType] = useState<'TAG' | 'IMEI'>('TAG');
   const [newMaint, setNewMaint] = useState<Partial<MaintenanceRecord>>({ type: MaintenanceType.CORRECTIVE, cost: 0, invoiceUrl: '' });
@@ -46,6 +54,40 @@ const DeviceManager = () => {
     const searchString = `${model?.name} ${brand?.name} ${d.assetTag} ${d.imei || ''} ${d.pulsusId || ''}`.toLowerCase();
     return searchString.includes(searchTerm.toLowerCase());
   });
+
+  // --- SELECTION HANDLERS ---
+  const toggleSelectAll = () => {
+    if (selectedDevices.size === filteredDevices.length) {
+      setSelectedDevices(new Set());
+    } else {
+      setSelectedDevices(new Set(filteredDevices.map(d => d.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelection = new Set(selectedDevices);
+    if (newSelection.has(id)) newSelection.delete(id);
+    else newSelection.add(id);
+    setSelectedDevices(newSelection);
+  };
+
+  // --- BULK ACTIONS ---
+  const handleExecuteBulkAction = () => {
+    const ids = Array.from(selectedDevices);
+    if (bulkAction === 'STATUS') {
+      ids.forEach(id => {
+        const dev = devices.find(d => d.id === id);
+        if (dev) updateDevice({ ...dev, status: bulkStatus }, adminName);
+      });
+    } else if (bulkAction === 'DELETE') {
+      if (!deleteReason.trim()) return alert('Informe o motivo para a exclusão em massa.');
+      ids.forEach(id => deleteDevice(id, adminName, deleteReason));
+    }
+    
+    setSelectedDevices(new Set());
+    setIsBulkModalOpen(false);
+    setDeleteReason('');
+  };
 
   const handleAddMaintenance = () => {
     if (!newMaint.description || !newMaint.cost) return;
@@ -124,7 +166,7 @@ const DeviceManager = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative pb-20">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Inventário de Dispositivos</h1>
@@ -142,10 +184,10 @@ const DeviceManager = () => {
 
       {/* --- ABAS DE STATUS --- */}
       <div className="flex gap-4 border-b border-gray-200">
-          {(['ALL', DeviceStatus.AVAILABLE, DeviceStatus.IN_USE, DeviceStatus.MAINTENANCE] as (DeviceStatus | 'ALL')[]).map(status => (
+          {(['ALL', DeviceStatus.AVAILABLE, DeviceStatus.IN_USE, DeviceStatus.MAINTENANCE, DeviceStatus.RETIRED] as (DeviceStatus | 'ALL')[]).map(status => (
               <button 
                   key={status}
-                  onClick={() => setViewStatus(status)}
+                  onClick={() => { setViewStatus(status); setSelectedDevices(new Set()); }}
                   className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${viewStatus === status ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
               >
                   {status === 'ALL' ? 'Todos' : status}
@@ -165,6 +207,14 @@ const DeviceManager = () => {
         <table className="w-full text-sm text-left">
           <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-700">
             <tr>
+              <th className="px-6 py-3 w-10">
+                  <input 
+                    type="checkbox" 
+                    className="rounded text-blue-600 focus:ring-blue-500" 
+                    checked={selectedDevices.size === filteredDevices.length && filteredDevices.length > 0}
+                    onChange={toggleSelectAll}
+                  />
+              </th>
               <th className="px-6 py-3">Modelo</th>
               <th className="px-6 py-3">Identificação</th>
               <th className="px-6 py-3">Localização</th>
@@ -178,8 +228,18 @@ const DeviceManager = () => {
               const { model, brand } = getModelDetails(d.modelId);
               const user = users.find(u => u.id === d.currentUserId);
               const sec = sectors.find(s => s.id === d.sectorId);
+              const isSelected = selectedDevices.has(d.id);
+
               return (
-                <tr key={d.id} className="border-b hover:bg-gray-50 transition-colors">
+                <tr key={d.id} className={`border-b transition-colors ${isSelected ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}>
+                  <td className="px-6 py-4">
+                    <input 
+                        type="checkbox" 
+                        className="rounded text-blue-600 focus:ring-blue-500"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(d.id)}
+                    />
+                  </td>
                   <td className="px-6 py-4">
                     <div className="font-bold text-gray-900">{model?.name}</div>
                     <div className="text-xs text-gray-500">{brand?.name}</div>
@@ -193,14 +253,20 @@ const DeviceManager = () => {
                     <div className="text-gray-500">{d.costCenter || 'S/ Cód'}</div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${d.status === DeviceStatus.AVAILABLE ? 'bg-green-100 text-green-700' : d.status === DeviceStatus.MAINTENANCE ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-800'}`}>{d.status}</span>
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold 
+                        ${d.status === DeviceStatus.AVAILABLE ? 'bg-green-100 text-green-700' : 
+                          d.status === DeviceStatus.MAINTENANCE ? 'bg-orange-100 text-orange-700' : 
+                          d.status === DeviceStatus.RETIRED ? 'bg-red-100 text-red-700' :
+                          'bg-blue-100 text-blue-800'}`}>
+                        {d.status}
+                    </span>
                   </td>
                   <td className="px-6 py-4 text-xs font-medium text-gray-700">{user?.fullName || '-'}</td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                         {d.pulsusId && (
                             <a 
-                                href={`https://hub.pulsus.mobi/devices/${d.pulsusId}`} 
+                                href={`https://app.pulsus.mobi/devices/${d.pulsusId}`} 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
                                 className="text-orange-600 hover:bg-orange-50 p-1.5 rounded transition-colors"
@@ -220,7 +286,97 @@ const DeviceManager = () => {
         </table>
       </div>
 
-      {/* --- MODAL DE EXCLUSÃO COM MOTIVO --- */}
+      {/* --- BARRA DE AÇÕES EM MASSA --- */}
+      {selectedDevices.size > 0 && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl z-[100] flex items-center gap-8 border border-slate-700 animate-slide-up">
+              <div className="flex items-center gap-3 pr-8 border-r border-slate-700">
+                  <div className="bg-blue-600 text-white h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm">
+                      {selectedDevices.size}
+                  </div>
+                  <span className="text-sm font-bold uppercase tracking-tight">Selecionados</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => { setBulkAction('STATUS'); setIsBulkModalOpen(true); }}
+                    className="flex items-center gap-2 px-4 py-2 hover:bg-slate-800 rounded-lg transition-colors text-sm font-medium text-blue-400"
+                  >
+                      <RefreshCw size={16}/> Alterar Status
+                  </button>
+                  <button 
+                    onClick={() => { setBulkAction('DELETE'); setIsBulkModalOpen(true); }}
+                    className="flex items-center gap-2 px-4 py-2 hover:bg-red-900/30 rounded-lg transition-colors text-sm font-medium text-red-400"
+                  >
+                      <Trash2 size={16}/> Excluir Lote
+                  </button>
+              </div>
+
+              <button 
+                onClick={() => setSelectedDevices(new Set())}
+                className="text-gray-400 hover:text-white ml-4"
+              >
+                  <X size={20}/>
+              </button>
+          </div>
+      )}
+
+      {/* --- MODAL DE AÇÃO EM MASSA --- */}
+      {isBulkModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 z-[110] flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
+                  <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
+                      <h3 className="font-bold">{bulkAction === 'STATUS' ? 'Alterar Status do Lote' : 'Excluir Lote Selecionado'}</h3>
+                      <button onClick={() => setIsBulkModalOpen(false)}><X size={20}/></button>
+                  </div>
+                  <div className="p-6 space-y-4">
+                      {bulkAction === 'STATUS' ? (
+                          <div>
+                              <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Novo Status para {selectedDevices.size} itens</label>
+                              <select 
+                                className="w-full border rounded-lg p-2.5"
+                                value={bulkStatus}
+                                onChange={(e) => setBulkStatus(e.target.value as DeviceStatus)}
+                              >
+                                  <option value={DeviceStatus.AVAILABLE}>{DeviceStatus.AVAILABLE}</option>
+                                  <option value={DeviceStatus.MAINTENANCE}>{DeviceStatus.MAINTENANCE}</option>
+                                  <option value={DeviceStatus.RETIRED}>{DeviceStatus.RETIRED}</option>
+                              </select>
+                          </div>
+                      ) : (
+                          <div className="space-y-4">
+                              <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-start gap-3 border border-red-100">
+                                  <AlertTriangle className="shrink-0 mt-0.5" size={18}/>
+                                  <p className="text-sm font-medium">Atenção: Você está excluindo {selectedDevices.size} dispositivos simultaneamente.</p>
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Motivo da Exclusão (Obrigatório)</label>
+                                  <textarea 
+                                      className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-red-500 outline-none" 
+                                      rows={3} 
+                                      placeholder="Ex: Renovação de Parque, Lote Defeituoso..."
+                                      value={deleteReason}
+                                      onChange={(e) => setDeleteReason(e.target.value)}
+                                  ></textarea>
+                              </div>
+                          </div>
+                      )}
+
+                      <div className="flex gap-3 pt-2">
+                          <button onClick={() => setIsBulkModalOpen(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">Cancelar</button>
+                          <button 
+                              onClick={handleExecuteBulkAction} 
+                              disabled={bulkAction === 'DELETE' && !deleteReason.trim()}
+                              className={`flex-1 py-2 rounded-lg text-white font-bold transition-all ${bulkAction === 'DELETE' && !deleteReason.trim() ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                          >
+                              {bulkAction === 'STATUS' ? 'Aplicar Mudança' : 'Confirmar Exclusão'}
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- MODAL DE EXCLUSÃO INDIVIDUAL COM MOTIVO --- */}
       {isDeleteModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
@@ -288,7 +444,18 @@ const DeviceManager = () => {
                          </select>
                      </div>
 
-                     <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3">
+                     <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Status do Ativo</label>
+                        <select className="w-full border rounded-lg p-2 text-sm bg-blue-50 font-bold text-blue-800" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as DeviceStatus})}>
+                            <option value={DeviceStatus.AVAILABLE}>{DeviceStatus.AVAILABLE}</option>
+                            <option value={DeviceStatus.IN_USE} disabled>{DeviceStatus.IN_USE}</option>
+                            <option value={DeviceStatus.MAINTENANCE}>{DeviceStatus.MAINTENANCE}</option>
+                            <option value={DeviceStatus.RETIRED}>{DeviceStatus.RETIRED}</option>
+                        </select>
+                        <p className="text-[9px] text-gray-400 mt-1">O status "Em Uso" é alterado automaticamente via Entrega.</p>
+                     </div>
+
+                     <div className="col-span-2 bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3 mt-2">
                          <div className="flex gap-4">
                              <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'TAG'} onChange={() => setIdType('TAG')} className="text-blue-600"/> Patrimônio</label>
                              <label className="flex items-center gap-2 text-sm font-bold cursor-pointer"><input type="radio" checked={idType === 'IMEI'} onChange={() => setIdType('IMEI')} className="text-blue-600"/> IMEI (Móvel)</label>
@@ -332,8 +499,8 @@ const DeviceManager = () => {
                     <div className="grid grid-cols-2 gap-4">
                         <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data da Compra</label><input type="date" className="w-full border rounded-lg p-2 text-sm" value={formData.purchaseDate || ''} onChange={e => setFormData({...formData, purchaseDate: e.target.value})}/></div>
                         <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor Pago (R$)</label><input type="number" step="0.01" className="w-full border rounded-lg p-2 text-sm" value={formData.purchaseCost || 0} onChange={e => setFormData({...formData, purchaseCost: parseFloat(e.target.value)})}/></div>
-                        <div className="col-span-2"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fornecedor</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.supplier || ''} onChange={e => setFormData({...formData, supplier: e.target.value})}/></div>
-                        <div className="col-span-2"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nota Fiscal (Número)</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.invoiceNumber || ''} onChange={e => setFormData({...formData, invoiceNumber: e.target.value})}/></div>
+                        <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.supplier || ''} onChange={e => setFormData({...formData, supplier: e.target.value})}/></div>
+                        <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Nota Fiscal (Número)</label><input className="w-full border rounded-lg p-2 text-sm" value={formData.invoiceNumber || ''} onChange={e => setFormData({...formData, invoiceNumber: e.target.value})}/></div>
                     </div>
                 )}
 

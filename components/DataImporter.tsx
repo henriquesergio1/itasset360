@@ -38,6 +38,20 @@ const DataImporter = () => {
 
   const adminName = currentUser?.name || 'Importador';
 
+  // --- NORMALIZAÇÃO DE STATUS ---
+  const mapStatus = (raw: string): DeviceStatus => {
+      if (!raw) return DeviceStatus.AVAILABLE;
+      
+      const clean = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      
+      if (clean === 'disponivel' || clean === 'estoque' || clean === 'liberado') return DeviceStatus.AVAILABLE;
+      if (clean === 'em uso' || clean === 'uso' || clean === 'atribuido') return DeviceStatus.IN_USE;
+      if (clean === 'manutencao' || clean === 'conserto' || clean === 'reparo') return DeviceStatus.MAINTENANCE;
+      if (clean === 'descarte' || clean === 'descartado' || clean === 'sucata' || clean === 'baixado') return DeviceStatus.RETIRED;
+      
+      return DeviceStatus.AVAILABLE; // Fallback
+  };
+
   const getTemplateHeaders = () => {
       switch(importType) {
           case 'USERS': return 'Nome Completo;Email;CPF;PIS;Cargo/Funcao (Dropdown);Setor/Codigo (Texto);RG;Endereco';
@@ -187,11 +201,10 @@ const DataImporter = () => {
                       modelId: mId,
                       assetTag: r['Patrimonio']?.trim() || r['IMEI']?.trim() || '',
                       serialNumber: (r['Serial']?.trim() || r['Patrimonio']?.trim() || r['IMEI']?.trim() || ''),
-                      status: (r['Status'] as DeviceStatus) || DeviceStatus.AVAILABLE,
+                      status: mapStatus(r['Status']), // USANDO MAPPER INTELIGENTE
                       purchaseCost: cleanCost,
                       purchaseDate: rawDate,
                       supplier: (r['Fornecedor'] || '').trim(),
-                      // MAPEAMENTO DIRETO SEM FALLBACKS:
                       pulsusId: (r['ID Pulsus'] || '').toString().trim(),
                       costCenter: (r['Centro de Custo'] || '').toString().trim(),
                       imei: r['IMEI']?.trim() || undefined,
@@ -244,9 +257,9 @@ const DataImporter = () => {
         <div className="mb-6 flex justify-between items-start">
             <div>
                 <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                    <Database className="text-blue-600"/> Importador Avançado (v1.8.8)
+                    <Database className="text-blue-600"/> Importador Inteligente (v1.9.0)
                 </h3>
-                <p className="text-sm text-gray-500">Mapeamento estrito de ID Pulsus e Centro de Custo.</p>
+                <p className="text-sm text-gray-500">Mapeamento flexível de Status e Colunas.</p>
             </div>
             {step !== 'UPLOAD' && (
                 <button onClick={() => setStep('UPLOAD')} className="text-sm text-blue-600 hover:underline flex items-center gap-1 font-bold">
@@ -275,7 +288,7 @@ const DataImporter = () => {
                         </label>
                     </div>
                     <div className="text-[11px] text-gray-400 text-center space-y-1">
-                        <p className="flex items-center justify-center gap-1 font-bold text-orange-600"><AlertCircle size={12}/> O ID Pulsus e o Centro de Custo devem estar em colunas separadas.</p>
+                        <p className="flex items-center justify-center gap-1 font-bold text-orange-600"><AlertCircle size={12}/> O Status agora ignora acentos (ex: disponivel = Disponível).</p>
                         <p>O motor de importação agora garante que um dado não sobrescreva o outro indevidamente.</p>
                     </div>
                 </div>
@@ -310,7 +323,7 @@ const DataImporter = () => {
                                     </td>
                                     <td className="px-6 py-3 text-gray-500">
                                         {item.errorMsg ? <span className="text-red-600 font-bold flex items-center gap-1"><AlertTriangle size={12}/> {item.errorMsg}</span> : 
-                                         item.status === 'CONFLICT' ? `Pulsus: ${item.row['ID Pulsus']} | C.Custo: ${item.row['Centro de Custo']}` : `Pronto para importar como ${item.row['Tipo']}`}
+                                         item.status === 'CONFLICT' ? `Mapeado para: ${mapStatus(item.row['Status'])}` : `Pronto para importar como ${item.row['Tipo']}`}
                                     </td>
                                 </tr>
                             ))}

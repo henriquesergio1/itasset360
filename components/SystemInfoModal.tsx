@@ -8,25 +8,24 @@ interface SystemInfoModalProps {
 
 const versions = [
     {
-    version: '1.8.8',
+    version: '1.9.0',
     date: 'Hoje',
-    title: 'Governança & Restauração de UI',
+    title: 'Inteligência de Importação & Ciclo de Vida',
     changes: [
-      'Restauradas as abas de filtro por status (Disponível, Em Uso, Manutenção) na tela de Dispositivos.',
-      'Reintroduzido o modal de confirmação de exclusão com motivo obrigatório para Dispositivos.',
-      'Garantida a separação estrita de colunas no importador para evitar repetição do ID Pulsus no Centro de Custo.',
-      'Botão de acesso ao MDM Pulsus restaurado com ícone de smartphone laranja na listagem.',
-      'Melhorada a validação de cabeçalhos no importador CSV para ignorar espaços em branco.'
+      'Normalização inteligente de Status no importador: Aceita "disponivel", "conserto", "descarte" e variações sem acento.',
+      'Corrigida URL oficial do MDM Pulsus para https://app.pulsus.mobi/devices/.',
+      'Restauradas Ações em Massa (Bulk Actions) para alteração de Status e Exclusão em lote.',
+      'Adicionada alteração manual de Status (Manutenção/Descarte) no modal de edição do dispositivo.',
+      'Melhorado o sistema de filtragem por abas de status na listagem de inventário.'
     ]
   },
     {
-    version: '1.8.7',
-    date: '24/01/2025',
-    title: 'Integridade de Dados & Atalhos MDM',
+    version: '1.8.9',
+    date: '25/01/2025',
+    title: 'Bulk Actions & Correção MDM',
     changes: [
-      'Corrigido mapeamento de colunas no importador: ID Pulsus e Centro de Custo agora são tratados como campos 100% independentes.',
-      'Melhorada a robustez do motor de importação para lidar com cabeçalhos que possuem espaços extras no CSV.',
-      'Ajustado fallback de identificação: Patrimônio e IMEI agora são preservados separadamente durante a importação.'
+      'Implementada barra de ações flutuante para exclusão e alteração de status em lote.',
+      'Adicionada coluna de seleção múltipla com checkbox no cabeçalho da tabela.'
     ]
   },
   {
