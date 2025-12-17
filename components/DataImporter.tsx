@@ -3,7 +3,8 @@ import React, { useState, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Device, User, SimCard, DeviceStatus, UserSector, DeviceModel, DeviceBrand, AssetType } from '../types';
-import { Download, Upload, FileText, CheckCircle, AlertTriangle, Loader2, Database, ArrowRight, RefreshCcw, X, CheckSquare, ChevronRight, ChevronDown } from 'lucide-react';
+// Added AlertCircle to imports from lucide-react
+import { Download, Upload, FileText, CheckCircle, AlertTriangle, AlertCircle, Loader2, Database, ArrowRight, RefreshCcw, X, CheckSquare, ChevronRight, ChevronDown } from 'lucide-react';
 
 type ImportType = 'USERS' | 'DEVICES' | 'SIMS';
 
@@ -24,7 +25,8 @@ const DataImporter = () => {
     sectors, addSector,
     models, addModel,
     brands, addBrand,
-    assetTypes, addAssetType
+    assetTypes, addAssetType,
+    customFields
   } = useData();
   const { user: currentUser } = useAuth();
   
@@ -37,6 +39,7 @@ const DataImporter = () => {
 
   const adminName = currentUser?.name || 'Importador';
 
+  // Usamos ";" por padrão para Excel BR
   const getTemplateHeaders = () => {
       switch(importType) {
           case 'USERS': return 'Nome Completo;Email;CPF;PIS;Cargo/Funcao (Dropdown);Setor/Codigo (Texto);RG;Endereco';
@@ -48,11 +51,12 @@ const DataImporter = () => {
 
   const downloadTemplate = () => {
       const headers = getTemplateHeaders();
+      // Adicionamos o BOM para o Excel abrir com a codificação correta
       const blob = new Blob(["\uFEFF" + headers], { type: 'text/csv;charset=utf-8;' }); 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `modelo_importacao_${importType.toLowerCase()}.csv`);
+      link.setAttribute('download', `template_${importType.toLowerCase()}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -67,15 +71,20 @@ const DataImporter = () => {
   };
 
   const parseAndAnalyze = (text: string) => {
-      const lines = text.split('\n').filter(l => l.trim());
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
       if (lines.length < 2) return alert('Arquivo vazio ou sem dados.');
       
+      // Detecção inteligente de separador (vírgula ou ponto-e-vírgula)
       const firstLine = lines[0];
       const separator = firstLine.includes(';') ? ';' : ',';
       
       const headers = firstLine.split(separator).map(h => h.trim().replace(/^"|"$/g, ''));
+      
       const rows = lines.slice(1).map(line => {
-          const values = line.split(separator).map(v => v.trim().replace(/^"|"$/g, ''));
+          // Regex robusta para lidar com valores entre aspas que contém o próprio separador
+          const regex = new RegExp(`${separator}(?=(?:(?:[^"]*"){2})*[^"]*$)`);
+          const values = line.split(regex).map(v => v.trim().replace(/^"|"$/g, ''));
+          
           return headers.reduce((obj: any, header, index) => {
               obj[header] = values[index] || '';
               return obj;
@@ -151,54 +160,57 @@ const DataImporter = () => {
               if (importType === 'DEVICES') {
                   const r = item.row;
                   
-                  const bName = r['Marca'] || 'Genérica';
-                  let bId = brands.find(b => b.name.toLowerCase() === bName.trim().toLowerCase())?.id || brandCache.get(bName.trim().toLowerCase());
+                  // 1. Resolução de Marca
+                  const bName = (r['Marca'] || 'Genérica').trim();
+                  let bId = brands.find(b => b.name.toLowerCase() === bName.toLowerCase())?.id || brandCache.get(bName.toLowerCase());
                   if (!bId) {
                       bId = Math.random().toString(36).substr(2, 9);
-                      addBrand({ id: bId, name: bName.trim() }, adminName);
-                      brandCache.set(bName.trim().toLowerCase(), bId);
+                      addBrand({ id: bId, name: bName }, adminName);
+                      brandCache.set(bName.toLowerCase(), bId);
                   }
 
-                  const tNameRaw = r['Tipo'] || 'Outros';
-                  const tNameClean = tNameRaw.trim();
-                  // Normalização de tipo inteligente
+                  // 2. Resolução de Tipo (Normalização)
+                  const tNameRaw = (r['Tipo'] || 'Outros').trim();
                   let tId = assetTypes.find(t => 
-                    t.name.toLowerCase() === tNameClean.toLowerCase() || 
-                    (tNameClean.toLowerCase() === 'celular' && t.name.toLowerCase() === 'smartphone') ||
-                    (tNameClean.toLowerCase() === 'computador' && t.name.toLowerCase() === 'notebook')
-                  )?.id || typeCache.get(tNameClean.toLowerCase());
+                    t.name.toLowerCase() === tNameRaw.toLowerCase() || 
+                    (tNameRaw.toLowerCase() === 'celular' && t.name.toLowerCase() === 'smartphone') ||
+                    (tNameRaw.toLowerCase() === 'computador' && t.name.toLowerCase() === 'notebook')
+                  )?.id || typeCache.get(tNameRaw.toLowerCase());
 
                   if (!tId) {
                       tId = Math.random().toString(36).substr(2, 9);
-                      addAssetType({ id: tId, name: tNameClean }, adminName);
-                      typeCache.set(tNameClean.toLowerCase(), tId);
+                      addAssetType({ id: tId, name: tNameRaw }, adminName);
+                      typeCache.set(tNameRaw.toLowerCase(), tId);
                   }
 
-                  const mName = r['Modelo'] || 'Genérico';
-                  let mId = models.find(m => m.name.toLowerCase() === mName.trim().toLowerCase() && m.brandId === bId)?.id || modelCache.get(mName.trim().toLowerCase() + bId);
+                  // 3. Resolução de Modelo
+                  const mName = (r['Modelo'] || 'Genérico').trim();
+                  let mId = models.find(m => m.name.toLowerCase() === mName.toLowerCase() && m.brandId === bId)?.id || modelCache.get(mName.toLowerCase() + bId);
                   if (!mId) {
                       mId = Math.random().toString(36).substr(2, 9);
-                      addModel({ id: mId, name: mName.trim(), brandId: bId, typeId: tId, imageUrl: '' }, adminName);
-                      modelCache.set(mName.trim().toLowerCase() + bId, mId);
+                      addModel({ id: mId, name: mName, brandId: bId, typeId: tId, imageUrl: '' }, adminName);
+                      modelCache.set(mName.toLowerCase() + bId, mId);
                   }
 
-                  const rawCost = r['Valor Pago'] || '0';
-                  const cleanCost = parseFloat(rawCost.toString().replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                  const rawDate = r['Data Compra'] || r['Data'] || new Date().toISOString().split('T')[0];
+                  // 4. Limpeza Financeira Robusta (Trata "1.440,20" ou "R$ 1440,20")
+                  const rawCost = (r['Valor Pago'] || '0').toString();
+                  const cleanCost = parseFloat(rawCost.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+                  
+                  const rawDate = r['Data Compra'] || new Date().toISOString().split('T')[0];
 
                   const deviceData: Device = {
                       id: item.status === 'NEW' ? Math.random().toString(36).substr(2, 9) : item.existingId!,
                       modelId: mId,
                       assetTag: r['Patrimonio']?.trim() || r['IMEI']?.trim(),
-                      serialNumber: r['Serial']?.trim() || r['Patrimonio']?.trim() || r['IMEI']?.trim(),
+                      serialNumber: (r['Serial']?.trim() || r['Patrimonio']?.trim() || r['IMEI']?.trim()),
                       status: (r['Status'] as DeviceStatus) || DeviceStatus.AVAILABLE,
                       purchaseCost: cleanCost,
                       purchaseDate: rawDate,
-                      supplier: r['Fornecedor'] || '',
-                      pulsusId: r['ID Pulsus'] || '',
+                      supplier: (r['Fornecedor'] || '').trim(),
+                      pulsusId: (r['ID Pulsus'] || '').trim(),
                       imei: r['IMEI']?.trim() || undefined,
                       sectorId: resolveSector(r['Setor Ativo']),
-                      costCenter: r['Centro de Custo'] || '',
+                      costCenter: (r['Centro de Custo'] || '').trim(),
                       currentUserId: null,
                       customData: {}
                   };
@@ -218,11 +230,11 @@ const DataImporter = () => {
                        fullName: r['Nome Completo']?.trim(),
                        email: r['Email']?.trim(),
                        cpf: r['CPF']?.trim(),
-                       pis: r['PIS'] || '',
-                       jobTitle: r['Setor/Codigo (Texto)'] || '',
+                       pis: r['PIS']?.trim() || '',
+                       jobTitle: r['Setor/Codigo (Texto)']?.trim() || '',
                        sectorId: sId,
-                       rg: r['RG'] || '',
-                       address: r['Endereco'] || '',
+                       rg: r['RG']?.trim() || '',
+                       address: r['Endereco']?.trim() || '',
                        active: true
                    };
                    if (item.status === 'NEW') {
@@ -247,13 +259,13 @@ const DataImporter = () => {
         <div className="mb-6 flex justify-between items-start">
             <div>
                 <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                    <Database className="text-blue-600"/> Importador Inteligente (v1.8.5)
+                    <Database className="text-blue-600"/> Importador Avançado (v1.8.6)
                 </h3>
-                <p className="text-sm text-gray-500">Mapeamento automático de Tipos e tratamento rigoroso de IMEI/Patrimônio.</p>
+                <p className="text-sm text-gray-500">Suporte a Ponto e Vírgula e correção automática de decimais.</p>
             </div>
             {step !== 'UPLOAD' && (
                 <button onClick={() => setStep('UPLOAD')} className="text-sm text-blue-600 hover:underline flex items-center gap-1 font-bold">
-                    <RefreshCcw size={14}/> Reiniciar
+                    <RefreshCcw size={14}/> Recomeçar
                 </button>
             )}
         </div>
@@ -270,7 +282,7 @@ const DataImporter = () => {
                 <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-12 flex flex-col items-center justify-center gap-6">
                     <div className="flex gap-4">
                         <button onClick={downloadTemplate} className="flex items-center gap-2 text-sm bg-white border border-gray-300 px-6 py-3 rounded-xl hover:bg-gray-100 shadow-sm font-bold text-gray-700 transition-all">
-                            <Download size={18} className="text-blue-600"/> Baixar Modelo CSV
+                            <Download size={18} className="text-blue-600"/> Baixar CSV Modelo (BR)
                         </button>
                         <label className="flex items-center gap-2 text-sm bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 cursor-pointer shadow-lg transition-all font-bold">
                             <Upload size={18}/> Selecionar Arquivo
@@ -278,8 +290,8 @@ const DataImporter = () => {
                         </label>
                     </div>
                     <div className="text-[11px] text-gray-400 text-center space-y-1">
-                        <p className="flex items-center justify-center gap-1"><CheckCircle size={12} className="text-green-500"/> IMEI ou Patrimônio agora são validados sem espaços em branco.</p>
-                        <p className="flex items-center justify-center gap-1"><CheckCircle size={12} className="text-green-500"/> "Celular" será automaticamente vinculado ao tipo "Smartphone" se existir.</p>
+                        <p className="flex items-center justify-center gap-1 font-bold text-orange-600"><AlertCircle size={12}/> Use ponto e vírgula (;) se seu Excel estiver em Português.</p>
+                        <p>Os campos ID Pulsus, Setor do Equipamento e Fornecedor já estão incluídos.</p>
                     </div>
                 </div>
             </div>
@@ -297,7 +309,7 @@ const DataImporter = () => {
                             <tr>
                                 <th className="px-6 py-4 font-black text-slate-600 uppercase">Identificador</th>
                                 <th className="px-6 py-4 font-black text-slate-600 uppercase">Ação</th>
-                                <th className="px-6 py-4 font-black text-slate-600 uppercase">Diagnóstico</th>
+                                <th className="px-6 py-4 font-black text-slate-600 uppercase">Dados Lidos</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -311,17 +323,17 @@ const DataImporter = () => {
                                             {item.status === 'NEW' ? 'CRIAR' : item.status === 'CONFLICT' ? 'ATUALIZAR' : 'ERRO'}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-3 text-gray-500 italic">
+                                    <td className="px-6 py-3 text-gray-500">
                                         {item.errorMsg ? <span className="text-red-600 font-bold flex items-center gap-1"><AlertTriangle size={12}/> {item.errorMsg}</span> : 
-                                         item.status === 'CONFLICT' ? 'Registro existente encontrado. Os dados serão mesclados.' : 'Tudo pronto para o novo cadastro.'}
+                                         item.status === 'CONFLICT' ? `Valor: R$ ${item.row['Valor Pago']} | Fornecedor: ${item.row['Fornecedor']}` : `Pronto para importar como ${item.row['Tipo']}`}
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
-                <button onClick={executeImport} className="mt-4 bg-blue-600 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all hover:scale-[1.01] active:scale-100">
-                    Iniciar Processamento de {analyzedData.filter(x => x.status !== 'ERROR').length} Registros
+                <button onClick={executeImport} className="mt-4 bg-blue-600 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all">
+                    Processar {analyzedData.filter(x => x.status !== 'ERROR').length} Itens
                 </button>
             </div>
         )}
@@ -330,32 +342,31 @@ const DataImporter = () => {
             <div className="flex flex-col items-center justify-center flex-1 space-y-8 animate-pulse">
                 <div className="relative">
                     <Loader2 size={64} className="text-blue-600 animate-spin"/>
-                    <Database className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-400" size={24}/>
                 </div>
                 <div className="text-center">
-                    <h3 className="text-2xl font-black text-slate-800">Sincronizando {progress.current} de {progress.total}</h3>
-                    <p className="text-gray-500 font-medium">Não feche esta janela. Salvando no SQL Server...</p>
+                    <h3 className="text-2xl font-black text-slate-800">Salvando {progress.current} de {progress.total}</h3>
+                    <p className="text-gray-500">Corrigindo decimais e vinculando setores...</p>
                 </div>
                 <div className="w-full max-w-md bg-gray-100 rounded-full h-5 overflow-hidden shadow-inner border">
-                    <div className="bg-blue-600 h-full transition-all duration-500 ease-out shadow-lg" style={{width: `${(progress.current/progress.total)*100}%`}}></div>
+                    <div className="bg-blue-600 h-full transition-all duration-500 shadow-lg" style={{width: `${(progress.current/progress.total)*100}%`}}></div>
                 </div>
             </div>
         )}
 
         {step === 'DONE' && (
             <div className="flex flex-col items-center justify-center flex-1 space-y-6">
-                <div className="h-24 w-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center shadow-lg border-4 border-green-50 animate-bounce"><CheckCircle size={56}/></div>
-                <h3 className="text-3xl font-black text-slate-800">Importação Finalizada!</h3>
+                <div className="h-24 w-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center shadow-lg animate-bounce"><CheckCircle size={56}/></div>
+                <h3 className="text-3xl font-black text-slate-800">Importação Completa!</h3>
                 <div className="grid grid-cols-3 gap-6 text-center bg-white p-10 rounded-3xl border shadow-xl w-full max-w-xl">
                     <div className="space-y-1"><p className="text-4xl font-black text-green-600">{progress.created}</p><p className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Criados</p></div>
                     <div className="space-y-1"><p className="text-4xl font-black text-orange-500">{progress.updated}</p><p className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Atualizados</p></div>
                     <div className="space-y-1"><p className="text-4xl font-black text-red-600">{progress.errors}</p><p className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Erros</p></div>
                 </div>
-                <button onClick={() => setStep('UPLOAD')} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase tracking-wider shadow-lg hover:bg-black transition-all hover:scale-105">Voltar para o Início</button>
+                <button onClick={() => setStep('UPLOAD')} className="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase tracking-wider shadow-lg hover:bg-black transition-all">Nova Importação</button>
                 {logs.length > 0 && (
-                    <div className="w-full max-w-xl bg-red-50 p-6 rounded-2xl text-xs text-red-700 border border-red-200 max-h-48 overflow-y-auto shadow-inner">
-                        <strong className="block mb-2 text-red-800 uppercase font-black">Relatório de Exceções:</strong>
-                        <ul className="space-y-1 list-disc pl-4">{logs.map((l, i) => <li key={i} className="font-medium">{l}</li>)}</ul>
+                    <div className="w-full max-w-xl bg-red-50 p-6 rounded-2xl text-xs text-red-700 border border-red-200 max-h-48 overflow-y-auto">
+                        <strong className="block mb-2 uppercase font-black text-red-800 tracking-tighter">Erros Reportados:</strong>
+                        <ul className="space-y-1 list-disc pl-4">{logs.map((l, i) => <li key={i}>{l}</li>)}</ul>
                     </div>
                 )}
             </div>
