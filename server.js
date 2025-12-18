@@ -19,122 +19,118 @@ const dbConfig = {
     port: parseInt(process.env.DB_PORT || '1433'),
     database: process.env.DB_DATABASE,
     options: {
-        encrypt: false, // Set to true if using Azure
+        encrypt: false,
         trustServerCertificate: true,
         enableArithAbort: true
     }
 };
 
-// --- AUTO MIGRATION SYSTEM ---
+// --- SISTEMA DE AUTO-MIGRAÇÃO ---
 async function runMigrations(pool) {
-    console.log('🔄 Verificando esquema do banco de dados (Auto-Migração)...');
+    console.log('🔄 Verificando esquema do banco de dados...');
     
-    // 1. Create Tables if not exist (Novas tabelas)
-    const createTablesQuery = `
+    // 1. Criar tabelas fundamentais se não existirem
+    const baseTables = `
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Sectors')
+        CREATE TABLE Sectors (Id NVARCHAR(50) PRIMARY KEY, Name NVARCHAR(100) NOT NULL);
+
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Brands')
+        CREATE TABLE Brands (Id NVARCHAR(50) PRIMARY KEY, Name NVARCHAR(100) NOT NULL);
+
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AssetTypes')
+        CREATE TABLE AssetTypes (Id NVARCHAR(50) PRIMARY KEY, Name NVARCHAR(100) NOT NULL, CustomFieldIds NVARCHAR(MAX));
+
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Models')
+        CREATE TABLE Models (Id NVARCHAR(50) PRIMARY KEY, Name NVARCHAR(100) NOT NULL, BrandId NVARCHAR(50), TypeId NVARCHAR(50), ImageUrl NVARCHAR(MAX));
+
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Users')
+        CREATE TABLE Users (Id NVARCHAR(50) PRIMARY KEY, FullName NVARCHAR(100) NOT NULL, Email NVARCHAR(100) NOT NULL, SectorId NVARCHAR(50), Active BIT DEFAULT 1);
+
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SimCards')
+        CREATE TABLE SimCards (Id NVARCHAR(50) PRIMARY KEY, PhoneNumber NVARCHAR(50) NOT NULL, Status NVARCHAR(50) NOT NULL);
+
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Devices')
+        CREATE TABLE Devices (Id NVARCHAR(50) PRIMARY KEY, AssetTag NVARCHAR(50) NOT NULL, Status NVARCHAR(50) NOT NULL);
+        
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AuditLogs')
+        CREATE TABLE AuditLogs (Id NVARCHAR(50) PRIMARY KEY, AssetId NVARCHAR(50), Action NVARCHAR(50), Timestamp DATETIME2 DEFAULT GETDATE(), AdminUser NVARCHAR(100), Notes NVARCHAR(MAX), BackupData NVARCHAR(MAX), AssetType NVARCHAR(50));
+        
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SystemSettings')
+        CREATE TABLE SystemSettings (Id INT PRIMARY KEY IDENTITY(1,1), AppName NVARCHAR(100), LogoUrl NVARCHAR(MAX));
+        
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SystemUsers')
+        CREATE TABLE SystemUsers (Id NVARCHAR(50) PRIMARY KEY, Name NVARCHAR(100), Email NVARCHAR(100), Password NVARCHAR(100), Role NVARCHAR(20));
+
         IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AccessoryTypes')
-        CREATE TABLE AccessoryTypes (
-            Id NVARCHAR(50) PRIMARY KEY,
-            Name NVARCHAR(100) NOT NULL
-        );
+        CREATE TABLE AccessoryTypes (Id NVARCHAR(50) PRIMARY KEY, Name NVARCHAR(100) NOT NULL);
 
         IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'CustomFields')
-        CREATE TABLE CustomFields (
-            Id NVARCHAR(50) PRIMARY KEY,
-            Name NVARCHAR(100) NOT NULL
-        );
+        CREATE TABLE CustomFields (Id NVARCHAR(50) PRIMARY KEY, Name NVARCHAR(100) NOT NULL);
 
         IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DeviceAccessories')
-        CREATE TABLE DeviceAccessories (
-            Id NVARCHAR(50) PRIMARY KEY,
-            DeviceId NVARCHAR(50) NOT NULL,
-            AccessoryTypeId NVARCHAR(50) NOT NULL,
-            Name NVARCHAR(100),
-            CONSTRAINT FK_DevAcc_Devices FOREIGN KEY (DeviceId) REFERENCES Devices(Id) ON DELETE CASCADE,
-            CONSTRAINT FK_DevAcc_Type FOREIGN KEY (AccessoryTypeId) REFERENCES AccessoryTypes(Id)
-        );
-    `;
-    try {
-        await pool.request().query(createTablesQuery);
-    } catch (e) {
-        console.warn('⚠️ Erro na criação de tabelas novas:', e.message);
-    }
+        CREATE TABLE DeviceAccessories (Id NVARCHAR(50) PRIMARY KEY, DeviceId NVARCHAR(50) NOT NULL, AccessoryTypeId NVARCHAR(50) NOT NULL, Name NVARCHAR(100));
 
-    // 2. Add Columns to Existing Tables (Apenas as novas e necessárias)
-    const missingColumns = [
-        // Tabela Devices
-        { table: 'Devices', col: 'CustomData', type: 'NVARCHAR(MAX)' }, 
-        { table: 'Devices', col: 'ModelId', type: 'NVARCHAR(50)' },
-        { table: 'Devices', col: 'PurchaseInvoiceUrl', type: 'NVARCHAR(MAX)' },
-        { table: 'Devices', col: 'Imei', type: 'NVARCHAR(50)' },
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'MaintenanceRecords')
+        CREATE TABLE MaintenanceRecords (Id NVARCHAR(50) PRIMARY KEY, DeviceId NVARCHAR(50) NOT NULL, Description NVARCHAR(MAX), Cost DECIMAL(18,2), Date DATETIME2, InvoiceUrl NVARCHAR(MAX));
+
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Terms')
+        CREATE TABLE Terms (Id NVARCHAR(50) PRIMARY KEY, UserId NVARCHAR(50), Type NVARCHAR(20), AssetDetails NVARCHAR(255), Date DATETIME2, FileUrl NVARCHAR(MAX));
+    `;
+    await pool.request().query(baseTables);
+
+    // 2. Adicionar colunas faltantes (Evolução do Esquema)
+    const columns = [
         { table: 'Devices', col: 'InternalCode', type: 'NVARCHAR(50)' },
+        { table: 'Devices', col: 'ModelId', type: 'NVARCHAR(50)' },
+        { table: 'Devices', col: 'SerialNumber', type: 'NVARCHAR(50)' },
+        { table: 'Devices', col: 'Imei', type: 'NVARCHAR(50)' },
         { table: 'Devices', col: 'PulsusId', type: 'NVARCHAR(50)' },
+        { table: 'Devices', col: 'CustomData', type: 'NVARCHAR(MAX)' },
+        { table: 'Devices', col: 'CurrentUserId', type: 'NVARCHAR(50)' },
         { table: 'Devices', col: 'SectorId', type: 'NVARCHAR(50)' },
         { table: 'Devices', col: 'CostCenter', type: 'NVARCHAR(50)' },
         { table: 'Devices', col: 'LinkedSimId', type: 'NVARCHAR(50)' },
+        { table: 'Devices', col: 'PurchaseDate', type: 'DATE' },
+        { table: 'Devices', col: 'PurchaseCost', type: 'DECIMAL(18,2)' },
         { table: 'Devices', col: 'InvoiceNumber', type: 'NVARCHAR(50)' },
         { table: 'Devices', col: 'Supplier', type: 'NVARCHAR(100)' },
-        { table: 'Devices', col: 'PurchaseDate', type: 'DATE' },
-        { table: 'Devices', col: 'PurchaseCost', type: 'DECIMAL(18, 2)' },
         
-        // Tabela AssetTypes
-        { table: 'AssetTypes', col: 'CustomFieldIds', type: 'NVARCHAR(MAX)' }, 
-
-        // Tabela Users
-        { table: 'Users', col: 'Pis', type: 'NVARCHAR(20)' },
+        { table: 'Users', col: 'InternalCode', type: 'NVARCHAR(50)' },
+        { table: 'Users', col: 'Cpf', type: 'NVARCHAR(20)' },
         { table: 'Users', col: 'Rg', type: 'NVARCHAR(20)' },
-        { table: 'Users', col: 'InternalCode', type: 'NVARCHAR(50)' }, // Padronização
+        { table: 'Users', col: 'Pis', type: 'NVARCHAR(20)' },
+        { table: 'Users', col: 'Address', type: 'NVARCHAR(255)' },
+        { table: 'Users', col: 'JobTitle', type: 'NVARCHAR(100)' },
         { table: 'Users', col: 'HasPendingIssues', type: 'BIT' },
         { table: 'Users', col: 'PendingIssuesNote', type: 'NVARCHAR(MAX)' },
-        
-        // Tabela SystemSettings
-        { table: 'SystemSettings', col: 'ReturnTermTemplate', type: 'NVARCHAR(MAX)' },
-        
-        // Tabela AuditLogs
-        { table: 'AuditLogs', col: 'BackupData', type: 'NVARCHAR(MAX)' }
+
+        { table: 'SystemSettings', col: 'Cnpj', type: 'NVARCHAR(20)' },
+        { table: 'SystemSettings', col: 'TermTemplate', type: 'NVARCHAR(MAX)' },
+        { table: 'SystemSettings', col: 'ReturnTermTemplate', type: 'NVARCHAR(MAX)' }
     ];
 
-    for (const item of missingColumns) {
+    for (const item of columns) {
         try {
             await pool.request().query(`
-                IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '${item.table}')
+                IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '${item.table}' AND COLUMN_NAME = '${item.col}')
                 BEGIN
-                    IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '${item.table}' AND COLUMN_NAME = '${item.col}')
-                    BEGIN
-                        ALTER TABLE ${item.table} ADD ${item.col} ${item.type};
-                        PRINT 'Coluna ${item.col} adicionada em ${item.table}';
-                    END
+                    ALTER TABLE ${item.table} ADD ${item.col} ${item.type};
                 END
             `);
-        } catch (e) {
-            console.warn(`⚠️ Aviso de Migração (${item.table}.${item.col}):`, e.message);
-        }
+        } catch (e) { console.warn(`Aviso na coluna ${item.table}.${item.col}:`, e.message); }
     }
-    console.log('✅ Banco de Dados Verificado/Atualizado.');
+    console.log('✅ Banco de Dados Verificado.');
 }
 
-// Connect to Database & Run Migrations
+// Conectar e Iniciar
 sql.connect(dbConfig).then(async pool => {
     if (pool.connected) {
-        console.log('✅ Connected to SQL Server');
+        console.log('✅ Conectado ao SQL Server');
         await runMigrations(pool);
     }
-}).catch(err => {
-    console.error('❌ Database Connection Failed:', err);
-});
+}).catch(err => console.error('❌ Erro na conexão SQL:', err));
 
-// Helper to execute query
-async function query(command) {
-    try {
-        const pool = await sql.connect(dbConfig);
-        const result = await pool.request().query(command);
-        return result.recordset;
-    } catch (err) {
-        console.error('SQL Error:', err);
-        throw err;
-    }
-}
-
-// --- HELPER LOG ---
+// Helper Log
 async function logAction(assetId, assetType, action, adminUser, notes, backupData = null) {
     try {
         const pool = await sql.connect(dbConfig);
@@ -147,52 +143,26 @@ async function logAction(assetId, assetType, action, adminUser, notes, backupDat
             .input('Notes', sql.NVarChar, notes || '')
             .input('BackupData', sql.NVarChar, backupData)
             .query(`INSERT INTO AuditLogs (Id, AssetId, AssetType, Action, AdminUser, Notes, BackupData) VALUES (@Id, @AssetId, @AssetType, @Action, @AdminUser, @Notes, @BackupData)`);
-    } catch (e) { console.error('Log Error', e); }
+    } catch (e) { console.error('Erro de Log:', e); }
 }
 
-// --- ROUTES ---
+// --- ROTAS DA API ---
 
-// Health Check
-app.get('/', (req, res) => {
-    res.send({ status: 'ok', service: 'IT Asset 360 API', port: PORT });
-});
-
-// 1. Devices (Cleaned of Legacy Fields)
+// 1. Devices
 app.get('/api/devices', async (req, res) => {
     try {
-        const devices = await query(`
-            SELECT 
-                Id as id, ModelId as modelId, SerialNumber as serialNumber, 
-                AssetTag as assetTag, InternalCode as internalCode, Imei as imei, PulsusId as pulsusId,
-                CustomData as customDataStr,
-                Status as status, CurrentUserId as currentUserId,
-                SectorId as sectorId, CostCenter as costCenter, LinkedSimId as linkedSimId,
-                PurchaseDate as purchaseDate, PurchaseCost as purchaseCost,
-                InvoiceNumber as invoiceNumber, Supplier as supplier, PurchaseInvoiceUrl as purchaseInvoiceUrl
-            FROM Devices
+        const result = await sql.query(`
+            SELECT Id as id, ModelId as modelId, SerialNumber as serialNumber, AssetTag as assetTag, 
+            InternalCode as internalCode, Imei as imei, PulsusId as pulsusId, Status as status, 
+            CurrentUserId as currentUserId, SectorId as sectorId, CostCenter as costCenter, 
+            LinkedSimId as linkedSimId, PurchaseDate as purchaseDate, PurchaseCost as purchaseCost, 
+            CustomData as customDataStr FROM Devices
         `);
-        
-        let accessories = [];
-        try {
-            accessories = await query(`SELECT Id as id, DeviceId as deviceId, AccessoryTypeId as accessoryTypeId, Name as name FROM DeviceAccessories`);
-        } catch(e) {
-            console.warn('Could not fetch accessories:', e.message);
-        }
-        
-        const result = devices.map(d => {
-            let customData = {};
-            try {
-                if (d.customDataStr) customData = JSON.parse(d.customDataStr);
-            } catch(e) {}
-
-            return {
-                ...d,
-                customData,
-                accessories: accessories.filter(a => a.deviceId === d.id)
-            };
-        });
-
-        res.json(result);
+        const formatted = result.recordset.map(d => ({
+            ...d,
+            customData: d.customDataStr ? JSON.parse(d.customDataStr) : {}
+        }));
+        res.json(formatted);
     } catch (err) { res.status(500).send(err.message); }
 });
 
@@ -207,34 +177,10 @@ app.post('/api/devices', async (req, res) => {
             .input('AssetTag', sql.NVarChar, d.assetTag)
             .input('InternalCode', sql.NVarChar, d.internalCode || null)
             .input('Imei', sql.NVarChar, d.imei || null)
-            .input('PulsusId', sql.NVarChar, d.pulsusId || null)
-            .input('CustomData', sql.NVarChar, JSON.stringify(d.customData || {}))
             .input('Status', sql.NVarChar, d.status)
-            .input('CurrentUserId', sql.NVarChar, d.currentUserId || null)
-            .input('SectorId', sql.NVarChar, d.sectorId || null)
-            .input('CostCenter', sql.NVarChar, d.costCenter || null)
-            .input('LinkedSimId', sql.NVarChar, d.linkedSimId || null)
-            .input('PurchaseDate', sql.Date, d.purchaseDate || null)
-            .input('PurchaseCost', sql.Decimal(18,2), d.purchaseCost || 0)
-            .input('InvoiceNumber', sql.NVarChar, d.invoiceNumber || null)
-            .input('Supplier', sql.NVarChar, d.supplier || null)
-            .query(`
-                INSERT INTO Devices (Id, ModelId, SerialNumber, AssetTag, InternalCode, Imei, PulsusId, CustomData, Status, CurrentUserId, SectorId, CostCenter, LinkedSimId, PurchaseDate, PurchaseCost, InvoiceNumber, Supplier)
-                VALUES (@Id, @ModelId, @SerialNumber, @AssetTag, @InternalCode, @Imei, @PulsusId, @CustomData, @Status, @CurrentUserId, @SectorId, @CostCenter, @LinkedSimId, @PurchaseDate, @PurchaseCost, @InvoiceNumber, @Supplier)
-            `);
-        
-        if (d.accessories && d.accessories.length > 0) {
-            for (const acc of d.accessories) {
-                await pool.request()
-                    .input('Id', sql.NVarChar, acc.id)
-                    .input('DeviceId', sql.NVarChar, d.id)
-                    .input('AccessoryTypeId', sql.NVarChar, acc.accessoryTypeId)
-                    .input('Name', sql.NVarChar, acc.name)
-                    .query(`INSERT INTO DeviceAccessories (Id, DeviceId, AccessoryTypeId, Name) VALUES (@Id, @DeviceId, @AccessoryTypeId, @Name)`);
-            }
-        }
-
-        await logAction(d.id, 'Device', 'Criação', d._adminUser, 'Novo dispositivo');
+            .input('CustomData', sql.NVarChar, JSON.stringify(d.customData || {}))
+            .query(`INSERT INTO Devices (Id, ModelId, SerialNumber, AssetTag, InternalCode, Imei, Status, CustomData) VALUES (@Id, @ModelId, @SerialNumber, @AssetTag, @InternalCode, @Imei, @Status, @CustomData)`);
+        await logAction(d.id, 'Device', 'Criação', d._adminUser, d.assetTag);
         res.json(d);
     } catch (err) { res.status(500).send(err.message); }
 });
@@ -247,102 +193,148 @@ app.put('/api/devices/:id', async (req, res) => {
             .input('Id', sql.NVarChar, req.params.id)
             .input('ModelId', sql.NVarChar, d.modelId)
             .input('InternalCode', sql.NVarChar, d.internalCode || null)
-            .input('CustomData', sql.NVarChar, JSON.stringify(d.customData || {}))
             .input('Status', sql.NVarChar, d.status)
             .input('CurrentUserId', sql.NVarChar, d.currentUserId || null)
-            .input('LinkedSimId', sql.NVarChar, d.linkedSimId || null)
-            .input('SectorId', sql.NVarChar, d.sectorId || null)
-            .query(`UPDATE Devices SET ModelId=@ModelId, InternalCode=@InternalCode, CustomData=@CustomData, Status=@Status, CurrentUserId=@CurrentUserId, LinkedSimId=@LinkedSimId, SectorId=@SectorId WHERE Id=@Id`);
-        
-        try {
-            await pool.request().query(`DELETE FROM DeviceAccessories WHERE DeviceId='${req.params.id}'`);
-            if (d.accessories && d.accessories.length > 0) {
-                for (const acc of d.accessories) {
-                    await pool.request()
-                        .input('Id', sql.NVarChar, acc.id || Math.random().toString(36).substr(2,9))
-                        .input('DeviceId', sql.NVarChar, d.id)
-                        .input('AccessoryTypeId', sql.NVarChar, acc.accessoryTypeId)
-                        .input('Name', sql.NVarChar, acc.name)
-                        .query(`INSERT INTO DeviceAccessories (Id, DeviceId, AccessoryTypeId, Name) VALUES (@Id, @DeviceId, @AccessoryTypeId, @Name)`);
-                }
-            }
-        } catch(e) { console.error('Accessory sync failed', e); }
-
-        await logAction(d.id, 'Device', 'Atualização', d._adminUser, `Atualização de cadastro (Tag: ${d.assetTag})`);
+            .input('CustomData', sql.NVarChar, JSON.stringify(d.customData || {}))
+            .query(`UPDATE Devices SET ModelId=@ModelId, InternalCode=@InternalCode, Status=@Status, CurrentUserId=@CurrentUserId, CustomData=@CustomData WHERE Id=@Id`);
+        await logAction(d.id, 'Device', 'Atualização', d._adminUser, `Motivo: ${d._reason || 'Edição'}`);
         res.json(d);
     } catch (err) { res.status(500).send(err.message); }
 });
 
-app.delete('/api/devices/:id', async (req, res) => {
-    const { _adminUser, reason } = req.body;
+// 2. Users
+app.get('/api/users', async (req, res) => {
     try {
-        const pool = await sql.connect(dbConfig);
-        // Fetch before delete for backup
-        const toDelete = await pool.request().query(`SELECT * FROM Devices WHERE Id = '${req.params.id}'`);
-        
-        if (toDelete.recordset.length > 0) {
-            const backupJson = JSON.stringify(toDelete.recordset[0]);
-            await query(`DELETE FROM Devices WHERE Id = '${req.params.id}'`);
-            await logAction(req.params.id, 'Device', 'Exclusão', _adminUser || 'Sistema', `Motivo: ${reason || 'Não informado'}`, backupJson); 
-        }
-        res.json({ success: true });
+        const result = await sql.query(`SELECT Id as id, FullName as fullName, Email as email, InternalCode as internalCode, Cpf as cpf, SectorId as sectorId, Active as active FROM Users`);
+        res.json(result.recordset.map(u => ({ ...u, active: !!u.active })));
     } catch (err) { res.status(500).send(err.message); }
 });
 
-// ... SIMS endpoints ...
-app.get('/api/sims', async (req, res) => { try { const data = await query(`SELECT Id as id, PhoneNumber as phoneNumber, Operator as operator, Iccid as iccid, PlanDetails as planDetails, Status as status, CurrentUserId as currentUserId FROM SimCards`); res.json(data); } catch (err) { res.status(500).send(err.message); } });
-app.post('/api/sims', async (req, res) => { const s = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, s.id).input('PhoneNumber', sql.NVarChar, s.phoneNumber).input('Operator', sql.NVarChar, s.operator).input('Iccid', sql.NVarChar, s.iccid).input('PlanDetails', sql.NVarChar, s.planDetails).input('Status', sql.NVarChar, s.status).query(`INSERT INTO SimCards (Id, PhoneNumber, Operator, Iccid, PlanDetails, Status) VALUES (@Id, @PhoneNumber, @Operator, @Iccid, @PlanDetails, @Status)`); await logAction(s.id, 'Sim', 'Criação', s._adminUser, s.phoneNumber); res.json(s); } catch (err) { res.status(500).send(err.message); } });
-app.put('/api/sims/:id', async (req, res) => { const s = req.body; try { const pool = await sql.connect(dbConfig); await pool.request().input('Id', sql.NVarChar, req.params.id).input('PhoneNumber', sql.NVarChar, s.phoneNumber).input('Operator', sql.NVarChar, s.operator).input('Iccid', sql.NVarChar, s.iccid).input('PlanDetails', sql.NVarChar, s.planDetails).input('Status', sql.NVarChar, s.status).query(`UPDATE SimCards SET PhoneNumber=@PhoneNumber, Operator=@Operator, Iccid=@Iccid, PlanDetails=@PlanDetails, Status=@Status WHERE Id=@Id`); await logAction(s.id, 'Sim', 'Atualização', s._adminUser, s.phoneNumber); res.json(s); } catch (err) { res.status(500).send(err.message); } });
-app.delete('/api/sims/:id', async (req, res) => { const { _adminUser, reason } = req.body; try { const pool = await sql.connect(dbConfig); const toDelete = await pool.request().query(`SELECT * FROM SimCards WHERE Id = '${req.params.id}'`); if (toDelete.recordset.length > 0) { const backupJson = JSON.stringify(toDelete.recordset[0]); await query(`DELETE FROM SimCards WHERE Id = '${req.params.id}'`); await logAction(req.params.id, 'Sim', 'Exclusão', _adminUser || 'Sistema', `Motivo: ${reason || 'Não informado'}`, backupJson); } res.json({ success: true }); } catch (err) { res.status(500).send(err.message); } });
-
-// USERS (Updated with InternalCode)
-app.get('/api/users', async (req, res) => { 
-    try { 
-        const data = await query(`SELECT Id as id, FullName as fullName, Cpf as cpf, Rg as rg, Pis as pis, Address as address, Email as email, SectorId as sectorId, JobTitle as jobTitle, InternalCode as internalCode, Active as active, HasPendingIssues as hasPendingIssues, PendingIssuesNote as pendingIssuesNote FROM Users`); 
-        const formatted = data.map(u => ({ ...u, active: !!u.active, hasPendingIssues: !!u.hasPendingIssues })); 
-        res.json(formatted); 
-    } catch (err) { res.status(500).send(err.message); } 
-});
-app.post('/api/users', async (req, res) => { 
-    const u = req.body; 
-    try { 
-        const pool = await sql.connect(dbConfig); 
+app.post('/api/users', async (req, res) => {
+    const u = req.body;
+    try {
+        const pool = await sql.connect(dbConfig);
         await pool.request()
             .input('Id', sql.NVarChar, u.id)
             .input('FullName', sql.NVarChar, u.fullName)
-            .input('Cpf', sql.NVarChar, u.cpf)
-            .input('Rg', sql.NVarChar, u.rg)
             .input('Email', sql.NVarChar, u.email)
-            .input('SectorId', sql.NVarChar, u.sectorId)
-            .input('JobTitle', sql.NVarChar, u.jobTitle || '')
             .input('InternalCode', sql.NVarChar, u.internalCode || null)
-            .input('Address', sql.NVarChar, u.address || '')
-            .query(`INSERT INTO Users (Id, FullName, Cpf, Rg, Email, SectorId, JobTitle, InternalCode, Address, Active) VALUES (@Id, @FullName, @Cpf, @Rg, @Email, @SectorId, @JobTitle, @InternalCode, @Address, 1)`); 
-        await logAction(u.id, 'User', 'Criação', u._adminUser, u.fullName); 
-        res.json(u); 
-    } catch (err) { res.status(500).send(err.message); } 
+            .input('Cpf', sql.NVarChar, u.cpf || null)
+            .input('SectorId', sql.NVarChar, u.sectorId)
+            .query(`INSERT INTO Users (Id, FullName, Email, InternalCode, Cpf, SectorId, Active) VALUES (@Id, @FullName, @Email, @InternalCode, @Cpf, @SectorId, 1)`);
+        await logAction(u.id, 'User', 'Criação', u._adminUser, u.fullName);
+        res.json(u);
+    } catch (err) { res.status(500).send(err.message); }
 });
-app.put('/api/users/:id', async (req, res) => { 
-    const u = req.body; 
-    try { 
-        const pool = await sql.connect(dbConfig); 
+
+app.put('/api/users/:id', async (req, res) => {
+    const u = req.body;
+    try {
+        const pool = await sql.connect(dbConfig);
         await pool.request()
             .input('Id', sql.NVarChar, req.params.id)
             .input('FullName', sql.NVarChar, u.fullName)
             .input('Email', sql.NVarChar, u.email)
-            .input('SectorId', sql.NVarChar, u.sectorId)
-            .input('JobTitle', sql.NVarChar, u.jobTitle || '')
             .input('InternalCode', sql.NVarChar, u.internalCode || null)
             .input('Active', sql.Bit, u.active ? 1 : 0)
-            .input('HasPendingIssues', sql.Bit, u.hasPendingIssues ? 1 : 0)
-            .input('PendingIssuesNote', sql.NVarChar, u.pendingIssuesNote || '')
-            .query(`UPDATE Users SET FullName=@FullName, Email=@Email, SectorId=@SectorId, JobTitle=@JobTitle, InternalCode=@InternalCode, Active=@Active, HasPendingIssues=@HasPendingIssues, PendingIssuesNote=@PendingIssuesNote WHERE Id=@Id`); 
-        await logAction(u.id, 'User', 'Atualização', u._adminUser, 'Dados atualizados'); 
-        res.json(u); 
-    } catch (err) { res.status(500).send(err.message); } 
+            .input('SectorId', sql.NVarChar, u.sectorId)
+            .query(`UPDATE Users SET FullName=@FullName, Email=@Email, InternalCode=@InternalCode, Active=@Active, SectorId=@SectorId WHERE Id=@Id`);
+        await logAction(u.id, 'User', 'Atualização', u._adminUser, 'Dados atualizados');
+        res.json(u);
+    } catch (err) { res.status(500).send(err.message); }
 });
 
-// ... (rest of endpoints) ...
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+// 3. Asset Types, Brands, Models
+app.get('/api/asset-types', async (req, res) => {
+    try {
+        const result = await sql.query(`SELECT Id as id, Name as name, CustomFieldIds as customFieldIdsStr FROM AssetTypes`);
+        res.json(result.recordset.map(t => ({ ...t, customFieldIds: t.customFieldIdsStr ? JSON.parse(t.customFieldIdsStr) : [] })));
+    } catch (err) { res.status(500).send(err.message); }
 });
+
+app.post('/api/asset-types', async (req, res) => {
+    const t = req.body;
+    try {
+        await sql.connect(dbConfig);
+        await sql.query(`INSERT INTO AssetTypes (Id, Name, CustomFieldIds) VALUES ('${t.id}', '${t.name}', '${JSON.stringify(t.customFieldIds || [])}')`);
+        res.json(t);
+    } catch (err) { res.status(500).send(err.message); }
+});
+
+app.get('/api/brands', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, Name as name FROM Brands`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+app.post('/api/brands', async (req, res) => {
+    const b = req.body;
+    try { await sql.query(`INSERT INTO Brands (Id, Name) VALUES ('${b.id}', '${b.name}')`); res.json(b); }
+    catch (err) { res.status(500).send(err.message); }
+});
+
+app.get('/api/models', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, Name as name, BrandId as brandId, TypeId as typeId, ImageUrl as imageUrl FROM Models`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+app.post('/api/models', async (req, res) => {
+    const m = req.body;
+    try {
+        const pool = await sql.connect(dbConfig);
+        await pool.request().input('Id', sql.NVarChar, m.id).input('Name', sql.NVarChar, m.name).input('BrandId', sql.NVarChar, m.brandId).input('TypeId', sql.NVarChar, m.typeId).input('ImageUrl', sql.NVarChar, m.imageUrl)
+            .query(`INSERT INTO Models (Id, Name, BrandId, TypeId, ImageUrl) VALUES (@Id, @Name, @BrandId, @TypeId, @ImageUrl)`);
+        res.json(m);
+    } catch (err) { res.status(500).send(err.message); }
+});
+
+// 4. Sims
+app.get('/api/sims', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, PhoneNumber as phoneNumber, Status as status, CurrentUserId as currentUserId FROM SimCards`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+
+// 5. Settings & Logs
+app.get('/api/settings', async (req, res) => {
+    try { const result = await sql.query(`SELECT TOP 1 AppName as appName, LogoUrl as logoUrl, Cnpj as cnpj, TermTemplate as termTemplate FROM SystemSettings`); res.json(result.recordset[0] || {}); }
+    catch (err) { res.status(500).send(err.message); }
+});
+app.put('/api/settings', async (req, res) => {
+    const s = req.body;
+    try {
+        const pool = await sql.connect(dbConfig);
+        await pool.request().input('AppName', sql.NVarChar, s.appName).input('LogoUrl', sql.NVarChar, s.logoUrl).input('Cnpj', sql.NVarChar, s.cnpj).input('TermTemplate', sql.NVarChar, s.termTemplate)
+            .query(`IF EXISTS (SELECT * FROM SystemSettings) UPDATE SystemSettings SET AppName=@AppName, LogoUrl=@LogoUrl, Cnpj=@Cnpj, TermTemplate=@TermTemplate ELSE INSERT INTO SystemSettings (AppName, LogoUrl, Cnpj, TermTemplate) VALUES (@AppName, @LogoUrl, @Cnpj, @TermTemplate)`);
+        res.json({ success: true });
+    } catch (err) { res.status(500).send(err.message); }
+});
+
+app.get('/api/logs', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, AssetId as assetId, AssetType as assetType, Action as action, Timestamp as timestamp, AdminUser as adminUser, Notes as notes, BackupData as backupData FROM AuditLogs ORDER BY Timestamp DESC`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+
+// Outras rotas necessárias para evitar 404
+app.get('/api/system-users', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, Name as name, Email as email, Role as role, Password as password FROM SystemUsers`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+app.get('/api/sectors', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, Name as name FROM Sectors`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+app.get('/api/maintenances', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, DeviceId as deviceId, Description as description, Cost as cost, Date as date FROM MaintenanceRecords`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+app.get('/api/terms', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, UserId as userId, Type as type, AssetDetails as assetDetails, Date as date, FileUrl as fileUrl FROM Terms`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+app.get('/api/accessory-types', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, Name as name FROM AccessoryTypes`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+app.get('/api/custom-fields', async (req, res) => {
+    try { const result = await sql.query(`SELECT Id as id, Name as name FROM CustomFields`); res.json(result.recordset); }
+    catch (err) { res.status(500).send(err.message); }
+});
+
+app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));

@@ -127,10 +127,20 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (dev?.linkedSimId) {
          setSims(prev => prev.map(s => s.id === dev.linkedSimId ? { ...s, status: DeviceStatus.AVAILABLE, currentUserId: null } : s));
     }
-    setDevices(prev => prev.filter(d => d.id !== id));
+    // Alterado para soft-delete (RETIRED) para manter consistência com v1.9.2 e ProdDataProvider
+    setDevices(prev => prev.map(d => d.id === id ? { ...d, status: DeviceStatus.RETIRED, currentUserId: null } : d));
     if (dev) {
         const backup = JSON.stringify(dev);
         logAction(ActionType.DELETE, 'Device', id, dev.assetTag, adminName, `Motivo: ${reason}`, backup);
+    }
+  };
+
+  // Restaura um dispositivo que foi movido para o descarte
+  const restoreDevice = (id: string, adminName: string, reason: string) => {
+    setDevices(prev => prev.map(d => d.id === id ? { ...d, status: DeviceStatus.AVAILABLE, currentUserId: null } : d));
+    const dev = devices.find(d => d.id === id);
+    if (dev) {
+        logAction(ActionType.RESTORE, 'Device', id, dev.assetTag, adminName, `Motivo: ${reason}`);
     }
   };
 
@@ -367,7 +377,7 @@ export const MockDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const value: DataContextType = {
     devices, sims, users, logs, loading: false, error: null, systemUsers, settings,
     models, brands, assetTypes, maintenances, sectors, accessoryTypes, customFields,
-    addDevice, updateDevice, deleteDevice,
+    addDevice, updateDevice, deleteDevice, restoreDevice, // Adicionado restoreDevice ao valor exportado
     addSim, updateSim, deleteSim,
     addUser, updateUser, toggleUserActive,
     addSystemUser, updateSystemUser, deleteSystemUser,

@@ -1,10 +1,8 @@
 
-// ... imports
 import React, { useState, useEffect } from 'react';
 import { DataContext, DataContextType } from './DataContext';
-import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term, AccessoryType, CustomField } from '../types';
+import { Device, SimCard, User, AuditLog, SystemUser, SystemSettings, DeviceModel, DeviceBrand, AssetType, MaintenanceRecord, UserSector, Term, AccessoryType, CustomField, DeviceStatus } from '../types';
 
-// API Configuration Relative Path
 const API_URL = ''; 
 
 export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -14,8 +12,6 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
   const [settings, setSettings] = useState<SystemSettings>({ appName: 'IT Asset', logoUrl: '' });
   const [logs, setLogs] = useState<AuditLog[]>([]);
-  
-  // New State
   const [models, setModels] = useState<DeviceModel[]>([]);
   const [brands, setBrands] = useState<DeviceBrand[]>([]);
   const [assetTypes, setAssetTypes] = useState<AssetType[]>([]);
@@ -28,8 +24,7 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Helper to check response
-  const safeJson = async (res: Response, fallbackValue: any = []) => {
+  const safeJson = async (res: Response) => {
       if (!res.ok) {
           const text = await res.text();
           throw new Error(`${res.status} ${res.statusText}: ${text.substring(0, 100)}`);
@@ -38,7 +33,6 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const fetchData = async () => {
-    console.log(`[ITAsset360] Sincronizando dados com API (/api)`);
     try {
       setLoading(true);
       const [
@@ -61,46 +55,39 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         fetch(`${API_URL}/api/custom-fields`)
       ]);
 
-      const devicesData = await safeJson(devicesRes);
-      const simsData = await safeJson(simsRes);
-      const usersData: User[] = await safeJson(usersRes);
-      const termsData: Term[] = await safeJson(termsRes, []); 
+      setDevices(await safeJson(devicesRes));
+      setSims(await safeJson(simsRes));
+      const usersData = await safeJson(usersRes);
+      const termsData = await safeJson(termsRes);
       
-      const usersWithTerms = usersData.map(u => ({
+      setUsers(usersData.map((u: User) => ({
           ...u,
-          terms: termsData.filter(t => t.userId === u.id)
-      }));
+          terms: termsData.filter((t: Term) => t.userId === u.id)
+      })));
 
-      setDevices(devicesData);
-      setSims(simsData);
-      setUsers(usersWithTerms);
-      setLogs(await safeJson(logsRes, []));
-      
-      if (sysUsersRes.ok) setSystemUsers(await sysUsersRes.json());
-      if (settingsRes.ok) setSettings(await settingsRes.json());
-      
+      setLogs(await safeJson(logsRes));
+      setSystemUsers(await safeJson(sysUsersRes));
+      setSettings(await safeJson(settingsRes));
       setModels(await safeJson(modelsRes));
       setBrands(await safeJson(brandsRes));
       setAssetTypes(await safeJson(typesRes));
       setMaintenances(await safeJson(maintRes));
-      
-      if (sectorsRes.ok) setSectors(await sectorsRes.json());
-      if (accTypesRes.ok) setAccessoryTypes(await accTypesRes.json());
-      if (customFieldsRes.ok) setCustomFields(await customFieldsRes.json());
+      setSectors(await safeJson(sectorsRes));
+      setAccessoryTypes(await safeJson(accTypesRes));
+      setCustomFields(await safeJson(customFieldsRes));
       setTerms(termsData);
       
+      setError(null);
     } catch (err: any) {
-      setError(`Erro de Conexão: ${err.message}.`);
+      console.error("Erro na sincronização:", err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  // Generic POST helper
   const postData = async (endpoint: string, data: any) => {
     const res = await fetch(`${API_URL}/api/${endpoint}`, {
       method: 'POST',
@@ -110,7 +97,6 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return safeJson(res);
   };
 
-  // Generic PUT helper
   const putData = async (endpoint: string, data: any) => {
     const res = await fetch(`${API_URL}/api/${endpoint}/${data.id}`, {
       method: 'PUT',
@@ -120,276 +106,70 @@ export const ProdDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return safeJson(res);
   };
 
-  // Generic DELETE helper
-  const deleteData = async (endpoint: string, id: string, extraData?: any) => {
-    const options: RequestInit = { method: 'DELETE' };
-    if (extraData) {
-        options.headers = { 'Content-Type': 'application/json' };
-        options.body = JSON.stringify(extraData);
-    }
-    const url = id ? `${API_URL}/api/${endpoint}/${id}` : `${API_URL}/api/${endpoint}`;
-    const res = await fetch(url, options);
-    if (!res.ok) throw new Error('Failed to delete');
-  };
-
-  const addDevice = async (device: Device, adminName: string) => {
-    const saved = await postData('devices', { ...device, _adminUser: adminName });
-    setDevices(prev => [...prev, saved]);
-    fetchData();
-  };
-
-  const updateDevice = async (device: Device, adminName: string) => {
-    await putData('devices', { ...device, _adminUser: adminName });
-    setDevices(prev => prev.map(d => d.id === device.id ? device : d));
-    fetchData();
-  };
-
+  const addDevice = async (device: Device, adminName: string) => { await postData('devices', { ...device, _adminUser: adminName }); fetchData(); };
+  const updateDevice = async (device: Device, adminName: string) => { await putData('devices', { ...device, _adminUser: adminName }); fetchData(); };
   const deleteDevice = async (id: string, adminName: string, reason: string) => {
-    await deleteData('devices', id, { _adminUser: adminName, reason });
-    setDevices(prev => prev.filter(d => d.id !== id));
+    const device = devices.find(d => d.id === id);
+    if (device) await putData('devices', { ...device, status: DeviceStatus.RETIRED, _adminUser: adminName, _reason: reason });
+    fetchData();
+  };
+  const restoreDevice = async (id: string, adminName: string, reason: string) => {
+    const device = devices.find(d => d.id === id);
+    if (device) await putData('devices', { ...device, status: DeviceStatus.AVAILABLE, currentUserId: null, _adminUser: adminName, _reason: reason });
     fetchData();
   };
 
-  const addSim = async (sim: SimCard, adminName: string) => {
-    const saved = await postData('sims', { ...sim, _adminUser: adminName });
-    setSims(prev => [...prev, saved]);
-    fetchData();
-  };
-
-  const updateSim = async (sim: SimCard, adminName: string) => {
-    await putData('sims', { ...sim, _adminUser: adminName });
-    setSims(prev => prev.map(s => s.id === sim.id ? sim : s));
-    fetchData();
-  };
-
-  const deleteSim = async (id: string, adminName: string, reason: string) => {
-    await deleteData('sims', id, { _adminUser: adminName, reason });
-    setSims(prev => prev.filter(s => s.id !== id));
-    fetchData();
-  };
-
-  const addUser = async (user: User, adminName: string) => {
-    const saved = await postData('users', { ...user, _adminUser: adminName });
-    setUsers(prev => [...prev, { ...saved, terms: [] }]);
-    fetchData();
-  };
-
-  const updateUser = async (user: User, adminName: string) => {
-    await putData('users', { ...user, _adminUser: adminName });
-    setUsers(prev => prev.map(u => u.id === user.id ? user : u));
-    fetchData();
-  };
-
+  const addUser = async (user: User, adminName: string) => { await postData('users', { ...user, _adminUser: adminName }); fetchData(); };
+  const updateUser = async (user: User, adminName: string) => { await putData('users', { ...user, _adminUser: adminName }); fetchData(); };
   const toggleUserActive = async (user: User, adminName: string, reason?: string) => {
-    const updatedUser = { ...user, active: !user.active };
-    await putData('users', { ...updatedUser, _adminUser: adminName, _reason: reason });
-    setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
+    await putData('users', { ...user, active: !user.active, _adminUser: adminName, _reason: reason });
     fetchData();
   };
 
-  const addSystemUser = async (user: SystemUser, adminName: string) => {
-    const saved = await postData('system-users', { ...user, _adminUser: adminName });
-    setSystemUsers(prev => [...prev, saved]);
+  // Resto dos métodos simplificados chamando fetchData ao final para sincronia
+  const addSim = async (s: SimCard, a: string) => { await postData('sims', {...s, _adminUser: a}); fetchData(); };
+  const updateSim = async (s: SimCard, a: string) => { await putData('sims', {...s, _adminUser: a}); fetchData(); };
+  const deleteSim = async (id: string, a: string, r: string) => { 
+      await fetch(`${API_URL}/api/sims/${id}`, { method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({_adminUser: a, reason: r}) });
+      fetchData(); 
   };
 
-  const updateSystemUser = async (user: SystemUser, adminName: string) => {
-    await putData('system-users', { ...user, _adminUser: adminName });
-    setSystemUsers(prev => prev.map(u => u.id === user.id ? user : u));
-  };
-
-  const deleteSystemUser = async (id: string, adminName: string) => {
-    await deleteData('system-users', id);
-    setSystemUsers(prev => prev.filter(u => u.id !== id));
-  };
-
-  const updateSettings = async (newSettings: SystemSettings, adminName: string) => {
-      await fetch(`${API_URL}/api/settings`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...newSettings, _adminUser: adminName })
-      });
-      setSettings(newSettings);
-      fetchData();
-  };
-
-  const assignAsset = async (assetType: 'Device' | 'Sim', assetId: string, userId: string, notes: string, adminName: string, termFile?: File) => {
-    const payload = { assetId, assetType, userId, notes, action: 'CHECKOUT', _adminUser: adminName };
-    await postData('operations/checkout', payload);
-
-    let assetName = 'Equipamento';
-    if (assetType === 'Device') {
-        const d = devices.find(x => x.id === assetId);
-        const m = models.find(mod => mod.id === d?.modelId);
-        assetName = `${m?.name} (${d?.assetTag})`;
-    } else {
-        const s = sims.find(x => x.id === assetId);
-        assetName = `Chip ${s?.phoneNumber}`;
-    }
-
-    const termData: Term = {
-        id: Math.random().toString(36).substr(2, 9),
-        userId,
-        type: 'ENTREGA',
-        assetDetails: assetName,
-        date: new Date().toISOString(),
-        fileUrl: ''
-    };
-
-    await postData('terms', termData);
-    await fetchData(); // Sincroniza em vez de recarregar a página
-  };
-
-  const returnAsset = async (assetType: 'Device' | 'Sim', assetId: string, notes: string, adminName: string, termFile?: File) => {
-    let userId = '';
-    let assetName = 'Equipamento';
-    if (assetType === 'Device') {
-        const d = devices.find(x => x.id === assetId);
-        userId = d?.currentUserId || '';
-        const m = models.find(mod => mod.id === d?.modelId);
-        assetName = `${m?.name} (${d?.assetTag})`;
-    } else {
-        const s = sims.find(x => x.id === assetId);
-        userId = s?.currentUserId || '';
-        assetName = `Chip ${s?.phoneNumber}`;
-    }
-
-    const payload = { assetId, assetType, notes, action: 'CHECKIN', _adminUser: adminName };
-    await postData('operations/checkin', payload);
-
-    if (userId) {
-        const termData: Term = {
-            id: Math.random().toString(36).substr(2, 9),
-            userId,
-            type: 'DEVOLUCAO',
-            assetDetails: assetName,
-            date: new Date().toISOString(),
-            fileUrl: ""
-        };
-        await postData('terms', termData);
-    }
-
-    await fetchData(); // Sincroniza em vez de recarregar a página
-  };
-
-  const getHistory = (assetId: string) => {
-    return logs.filter(l => l.assetId === assetId);
-  };
-
-  const addModel = async (model: DeviceModel, adminName: string) => {
-      const saved = await postData('models', { ...model, _adminUser: adminName });
-      setModels(prev => [...prev, saved]);
-  };
-  const updateModel = async (model: DeviceModel, adminName: string) => {
-      await putData('models', { ...model, _adminUser: adminName });
-      setModels(prev => prev.map(m => m.id === model.id ? model : m));
-  };
-  const deleteModel = async (id: string, adminName: string) => {
-      await deleteData('models', id);
-      setModels(prev => prev.filter(m => m.id !== id));
-  };
-
-  const addBrand = async (brand: DeviceBrand, adminName: string) => {
-      const saved = await postData('brands', { ...brand, _adminUser: adminName });
-      setBrands(prev => [...prev, saved]);
-  };
-  const updateBrand = async (brand: DeviceBrand, adminName: string) => {
-      await putData('brands', { ...brand, _adminUser: adminName });
-      setBrands(prev => prev.map(b => b.id === brand.id ? brand : b));
-  };
-  const deleteBrand = async (id: string, adminName: string) => {
-      await deleteData('brands', id);
-      setBrands(prev => prev.filter(b => b.id !== id));
-  };
-
-  const addAssetType = async (type: AssetType, adminName: string) => {
-      const saved = await postData('asset-types', { ...type, _adminUser: adminName });
-      setAssetTypes(prev => [...prev, saved]);
-  };
-  const updateAssetType = async (type: AssetType, adminName: string) => {
-      await putData('asset-types', { ...type, _adminUser: adminName });
-      setAssetTypes(prev => prev.map(t => t.id === type.id ? type : t));
-  };
-  const deleteAssetType = async (id: string, adminName: string) => {
-      await deleteData('asset-types', id);
-      setAssetTypes(prev => prev.filter(t => t.id !== id));
-  };
-
-  const addMaintenance = async (record: MaintenanceRecord, adminName: string) => {
-      const saved = await postData('maintenances', { ...record, _adminUser: adminName });
-      setMaintenances(prev => [...prev, saved]);
-      fetchData();
-  };
-  const deleteMaintenance = async (id: string, adminName: string) => {
-      await deleteData('maintenances', id);
-      setMaintenances(prev => prev.filter(m => m.id !== id));
-      fetchData();
-  };
-
-  const addSector = async (sector: UserSector, adminName: string) => {
-      const saved = await postData('sectors', { ...sector, _adminUser: adminName });
-      setSectors(prev => [...prev, saved]);
-  };
-  const deleteSector = async (id: string, adminName: string) => {
-      await deleteData('sectors', id);
-      setSectors(prev => prev.filter(s => s.id !== id));
-  };
-
-  const addAccessoryType = async (type: AccessoryType, adminName: string) => {
-      const saved = await postData('accessory-types', { ...type, _adminUser: adminName });
-      setAccessoryTypes(prev => [...prev, saved]);
-  };
-  const updateAccessoryType = async (type: AccessoryType, adminName: string) => {
-      await putData('accessory-types', { ...type, _adminUser: adminName });
-      setAccessoryTypes(prev => prev.map(t => t.id === type.id ? type : t));
-  };
-  const deleteAccessoryType = async (id: string, adminName: string) => {
-      await deleteData('accessory-types', id);
-      setAccessoryTypes(prev => prev.filter(t => t.id !== id));
-  };
-
-  const addCustomField = async (field: CustomField, adminName: string) => {
-      const saved = await postData('custom-fields', { ...field, _adminUser: adminName });
-      setCustomFields(prev => [...prev, saved]);
-  };
-  const deleteCustomField = async (id: string, adminName: string) => {
-      await deleteData('custom-fields', id);
-      setCustomFields(prev => prev.filter(f => f.id !== id));
-  };
-
-  const clearLogs = async () => {
-    await fetch(`${API_URL}/api/logs`, { method: 'DELETE' });
-    setLogs([]);
-    fetchData();
-  };
-
-  const restoreItem = async (logId: string, adminName: string) => {
-    await postData('restore', { logId, _adminUser: adminName });
-    await fetchData();
-  };
+  const addAssetType = async (t: AssetType, a: string) => { await postData('asset-types', {...t, _adminUser: a}); fetchData(); };
+  const updateAssetType = async (t: AssetType, a: string) => { await putData('asset-types', {...t, _adminUser: a}); fetchData(); };
+  const addBrand = async (b: DeviceBrand, a: string) => { await postData('brands', {...b, _adminUser: a}); fetchData(); };
+  const updateBrand = async (b: DeviceBrand, a: string) => { await putData('brands', {...b, _adminUser: a}); fetchData(); };
+  const addModel = async (m: DeviceModel, a: string) => { await postData('models', {...m, _adminUser: a}); fetchData(); };
+  const updateModel = async (m: DeviceModel, a: string) => { await putData('models', {...m, _adminUser: a}); fetchData(); };
+  const updateSettings = async (s: SystemSettings, a: string) => { await fetch(`${API_URL}/api/settings`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...s, _adminUser: a}) }); fetchData(); };
 
   const value: DataContextType = {
     devices, sims, users, logs, loading, error, systemUsers, settings,
     models, brands, assetTypes, maintenances, sectors, accessoryTypes, customFields,
-    addDevice, updateDevice, deleteDevice,
+    addDevice, updateDevice, deleteDevice, restoreDevice,
     addSim, updateSim, deleteSim,
     addUser, updateUser, toggleUserActive,
-    addSystemUser, updateSystemUser, deleteSystemUser,
     updateSettings,
-    assignAsset, returnAsset, getHistory,
-    clearLogs,
-    restoreItem,
-    addModel, updateModel, deleteModel,
-    addBrand, updateBrand, deleteBrand,
-    addAssetType, updateAssetType, deleteAssetType,
-    addMaintenance, deleteMaintenance,
-    addSector, deleteSector,
-    addAccessoryType, updateAccessoryType, deleteAccessoryType,
-    addCustomField, deleteCustomField
+    assignAsset: async (at, aid, uid, n, adm) => { await postData('operations/checkout', { assetId: aid, assetType: at, userId: uid, notes: n, _adminUser: adm }); fetchData(); },
+    returnAsset: async (at, aid, n, adm) => { await postData('operations/checkin', { assetId: aid, assetType: at, notes: n, _adminUser: adm }); fetchData(); },
+    getHistory: (id) => logs.filter(l => l.assetId === id),
+    clearLogs: async () => { await fetch(`${API_URL}/api/logs`, { method: 'DELETE' }); fetchData(); },
+    restoreItem: async (lid, adm) => { await postData('restore', { logId: lid, _adminUser: adm }); fetchData(); },
+    addAssetType, updateAssetType, deleteAssetType: async (id) => { await fetch(`${API_URL}/api/asset-types/${id}`, {method: 'DELETE'}); fetchData(); },
+    addBrand, updateBrand, deleteBrand: async (id) => { await fetch(`${API_URL}/api/brands/${id}`, {method: 'DELETE'}); fetchData(); },
+    addModel, updateModel, deleteModel: async (id) => { await fetch(`${API_URL}/api/models/${id}`, {method: 'DELETE'}); fetchData(); },
+    addMaintenance: async (m, adm) => { await postData('maintenances', {...m, _adminUser: adm}); fetchData(); },
+    deleteMaintenance: async (id) => { await fetch(`${API_URL}/api/maintenances/${id}`, {method: 'DELETE'}); fetchData(); },
+    addSector: async (s, adm) => { await postData('sectors', {...s, _adminUser: adm}); fetchData(); },
+    deleteSector: async (id) => { await fetch(`${API_URL}/api/sectors/${id}`, {method: 'DELETE'}); fetchData(); },
+    addAccessoryType: async (t, adm) => { await postData('accessory-types', {...t, _adminUser: adm}); fetchData(); },
+    updateAccessoryType: async (t, adm) => { await putData('accessory-types', {...t, _adminUser: adm}); fetchData(); },
+    deleteAccessoryType: async (id) => { await fetch(`${API_URL}/api/accessory-types/${id}`, {method: 'DELETE'}); fetchData(); },
+    addCustomField: async (f, adm) => { await postData('custom-fields', {...f, _adminUser: adm}); fetchData(); },
+    deleteCustomField: async (id) => { await fetch(`${API_URL}/api/custom-fields/${id}`, {method: 'DELETE'}); fetchData(); },
+    addSystemUser: async (u, adm) => { await postData('system-users', {...u, _adminUser: adm}); fetchData(); },
+    updateSystemUser: async (u, adm) => { await putData('system-users', {...u, _adminUser: adm}); fetchData(); },
+    deleteSystemUser: async (id) => { await fetch(`${API_URL}/api/system-users/${id}`, {method: 'DELETE'}); fetchData(); }
   };
 
-  return (
-    <DataContext.Provider value={value}>
-      {children}
-    </DataContext.Provider>
-  );
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
