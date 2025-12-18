@@ -31,6 +31,7 @@ const DeviceManager = () => {
   const [isModelSettingsOpen, setIsModelSettingsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'FINANCIAL' | 'MAINTENANCE' | 'HISTORY'>('GENERAL');
+  const [isUploadingInvoice, setIsUploadingInvoice] = useState(false);
   
   // Quick View User
   const [viewingUser, setViewingUser] = useState<User | null>(null);
@@ -84,6 +85,19 @@ const DeviceManager = () => {
       ...prev,
       customData: { ...(prev.customData || {}), [fieldId]: value }
     }));
+  };
+
+  const handleInvoiceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          setIsUploadingInvoice(true);
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setFormData({ ...formData, purchaseInvoiceUrl: reader.result as string });
+              setIsUploadingInvoice(false);
+          };
+          reader.readAsDataURL(file);
+      }
   };
 
   const filteredDevices = devices.filter(d => {
@@ -155,22 +169,6 @@ const DeviceManager = () => {
       if (!selectedOpAsset) return;
       await returnAsset('Device', selectedOpAsset.id, opNotes, adminName);
       setIsSuccessState(true);
-  };
-
-  const printAfterOp = () => {
-      if (!selectedOpAsset) return;
-      const targetUserId = opUserId || selectedOpAsset.currentUserId;
-      const user = users.find(u => u.id === targetUserId);
-      const { model, brand, type } = getModelDetails(selectedOpAsset.modelId);
-      const linkedSim = sims.find(s => s.id === selectedOpAsset.linkedSimId);
-      const sectorName = sectors.find(s => s.id === user?.sectorId)?.name;
-      if (user) {
-          generateAndPrintTerm({
-              user, asset: selectedOpAsset, settings, model, brand, type,
-              actionType: opUserId ? 'ENTREGA' : 'DEVOLUCAO', linkedSim, sectorName, notes: opNotes,
-              checklist: !opUserId ? opChecklist : undefined
-          });
-      }
   };
 
   const deviceMaintenances = maintenances.filter(m => m.deviceId === editingId);
@@ -333,6 +331,29 @@ const DeviceManager = () => {
                         <div className="col-span-2">
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Fornecedor / Loja</label>
                             <input disabled={isViewOnly} className="w-full border rounded-lg p-2.5 text-sm" value={formData.supplier || ''} onChange={e => setFormData({...formData, supplier: e.target.value})} />
+                        </div>
+                        <div className="col-span-2 mt-4">
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Nota Fiscal / Comprovante</label>
+                            <div className="flex items-center gap-4">
+                                {formData.purchaseInvoiceUrl ? (
+                                    <div className="flex-1 flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-white rounded-lg shadow-sm text-emerald-600"><FileText size={20}/></div>
+                                            <span className="text-xs font-bold text-emerald-800">Nota Fiscal Anexada</span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <a href={formData.purchaseInvoiceUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 border border-blue-100 shadow-sm transition-all"><ExternalLink size={16}/></a>
+                                            {!isViewOnly && <button onClick={() => setFormData({...formData, purchaseInvoiceUrl: ''})} className="p-2 bg-white text-red-500 rounded-lg hover:bg-red-50 border border-red-100 shadow-sm transition-all"><Trash2 size={16}/></button>}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <label className={`flex-1 flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-2xl transition-all ${isViewOnly ? 'bg-gray-50 border-gray-200' : 'hover:border-blue-400 hover:bg-blue-50/30 cursor-pointer border-slate-200'}`}>
+                                        {isUploadingInvoice ? <RefreshCw size={24} className="animate-spin text-blue-500 mb-2"/> : <Upload size={24} className="text-slate-300 mb-2"/>}
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{isUploadingInvoice ? 'Processando...' : 'Clique para anexar arquivo'}</span>
+                                        {!isViewOnly && <input type="file" className="hidden" accept="application/pdf,image/*" onChange={handleInvoiceUpload} />}
+                                    </label>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}

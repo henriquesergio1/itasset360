@@ -51,7 +51,7 @@ const DataImporter = () => {
   const getTemplateHeaders = () => {
       switch(importType) {
           case 'USERS': return 'Nome Completo;Email;CPF;PIS;Cargo/Funcao;Setor/Codigo;RG;Endereco';
-          case 'DEVICES': return 'Patrimonio;Serial;Modelo;Marca;Tipo;Status;Valor Pago;Data Compra;Fornecedor;IMEI;Email Responsavel;Setor Ativo;Centro de Custo';
+          case 'DEVICES': return 'Patrimonio;Serial;Modelo;Marca;Tipo;Status;Valor Pago;Data Compra;Fornecedor;IMEI;ID Pulsus;Email Responsavel;Setor Ativo;Centro de Custo';
           case 'SIMS': return 'Numero;Operadora;ICCID;Plano';
           default: return '';
       }
@@ -130,7 +130,6 @@ const DataImporter = () => {
       const brandCache = new Map();
       const typeCache = new Map();
       const modelCache = new Map();
-      const sectorCache = new Map();
 
       for (let i = 0; i < toProcess.length; i++) {
           const item = toProcess[i];
@@ -159,7 +158,6 @@ const DataImporter = () => {
                       modelCache.set(mName.toLowerCase() + bId, mId);
                   }
 
-                  // LÓGICA DE VÍNCULO AUTOMÁTICO
                   const respEmail = r['Email Responsavel']?.trim().toLowerCase();
                   const foundUser = respEmail ? users.find(u => u.email.toLowerCase() === respEmail) : null;
                   const targetStatus = foundUser ? DeviceStatus.IN_USE : mapStatus(r['Status']);
@@ -171,6 +169,7 @@ const DataImporter = () => {
                       serialNumber: r['Serial'] || r['Patrimonio'],
                       status: targetStatus,
                       currentUserId: foundUser?.id || null,
+                      pulsusId: r['ID Pulsus'], // CAMPO ADICIONADO
                       purchaseCost: parseFloat(r['Valor Pago']?.replace(',', '.') || '0'),
                       purchaseDate: r['Data Compra'] || new Date().toISOString().split('T')[0],
                       supplier: r['Fornecedor'],
@@ -192,7 +191,7 @@ const DataImporter = () => {
                       jobTitle: r['Setor/Codigo'],
                       rg: r['RG'],
                       address: r['Endereco'],
-                      sectorId: '', // Setor precisa ser resolvido se necessário
+                      sectorId: '', 
                       active: true
                   };
                   if (item.status === 'NEW') { addUser(userData, adminName); setProgress(p => ({ ...p, created: p.created + 1 })); }
@@ -211,9 +210,9 @@ const DataImporter = () => {
     <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full animate-fade-in">
         <div className="mb-8">
             <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-                <Database className="text-blue-600"/> Importador de Dados Snipe-IT
+                <Database className="text-blue-600"/> Importador Snipe-IT para IT Asset 360
             </h3>
-            <p className="text-slate-500 font-medium">Migre seus ativos em massa de forma organizada.</p>
+            <p className="text-slate-500 font-medium">Sincronize sua base de dados MariaDB/CSV em massa.</p>
         </div>
 
         {step === 'UPLOAD' && (
@@ -237,8 +236,7 @@ const DataImporter = () => {
                         </label>
                     </div>
                     <div className="text-center space-y-2">
-                        <p className="text-sm font-bold text-slate-400">Dica: No arquivo de Dispositivos, preencha a coluna <span className="text-blue-600">"Email Responsavel"</span> para vincular automaticamente.</p>
-                        <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">O sistema criará Marcas e Modelos inexistentes automaticamente.</p>
+                        <p className="text-sm font-bold text-slate-400">Dica: No arquivo de Dispositivos, preencha as colunas <span className="text-blue-600">"ID Pulsus"</span> e <span className="text-blue-600">"Email Responsavel"</span>.</p>
                     </div>
                 </div>
             </div>
@@ -257,9 +255,9 @@ const DataImporter = () => {
                     <table className="w-full text-xs text-left">
                         <thead className="bg-slate-50 sticky top-0 shadow-sm z-10 border-b">
                             <tr>
-                                <th className="px-8 py-4 font-black text-slate-400 uppercase tracking-widest">Identificador Primário</th>
+                                <th className="px-8 py-4 font-black text-slate-400 uppercase tracking-widest">Identificador</th>
                                 <th className="px-8 py-4 font-black text-slate-400 uppercase tracking-widest">Operação</th>
-                                <th className="px-8 py-4 font-black text-slate-400 uppercase tracking-widest">Responsável Detectado</th>
+                                <th className="px-8 py-4 font-black text-slate-400 uppercase tracking-widest">Responsável / Pulsus</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -274,15 +272,18 @@ const DataImporter = () => {
                                         </span>
                                     </td>
                                     <td className="px-8 py-4">
-                                        {importType === 'DEVICES' && item.row['Email Responsavel'] ? (
-                                            <div className="flex items-center gap-2">
-                                                {users.find(u => u.email.toLowerCase() === item.row['Email Responsavel'].toLowerCase()) ? (
-                                                    <span className="text-green-600 font-bold flex items-center gap-1"><CheckCircle size={14}/> {item.row['Email Responsavel']}</span>
-                                                ) : (
-                                                    <span className="text-slate-400 italic">Usuário não encontrado (será ignorado)</span>
-                                                )}
-                                            </div>
-                                        ) : '-'}
+                                        <div className="flex flex-col gap-1">
+                                            {importType === 'DEVICES' && item.row['ID Pulsus'] && <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded font-black text-slate-500 w-fit">PULSUS: {item.row['ID Pulsus']}</span>}
+                                            {importType === 'DEVICES' && item.row['Email Responsavel'] ? (
+                                                <div className="flex items-center gap-2">
+                                                    {users.find(u => u.email.toLowerCase() === item.row['Email Responsavel'].toLowerCase()) ? (
+                                                        <span className="text-green-600 font-bold flex items-center gap-1"><CheckCircle size={14}/> {item.row['Email Responsavel']}</span>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic">Usuário não encontrado</span>
+                                                    )}
+                                                </div>
+                                            ) : '-'}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
