@@ -4,13 +4,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { User, UserSector, ActionType, Device, SimCard, Term } from '../types';
-import { Plus, Search, Edit2, Trash2, Mail, MapPin, Briefcase, Power, Settings, X, Smartphone, FileText, History, ExternalLink, AlertTriangle, Printer, Link as LinkIcon, User as UserIcon, Upload, CheckCircle, Filter, Users, Archive, Tag, ChevronRight, Cpu, Hash, CreditCard, Fingerprint, RefreshCw } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Mail, MapPin, Briefcase, Power, Settings, X, Smartphone, FileText, History, ExternalLink, AlertTriangle, Printer, Link as LinkIcon, User as UserIcon, Upload, CheckCircle, Filter, Users, Archive, Tag, ChevronRight, Cpu, Hash, CreditCard, Fingerprint, RefreshCw, Save } from 'lucide-react';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
 const UserManager = () => {
   const { 
     users, addUser, updateUser, toggleUserActive, 
-    sectors, addSector,
+    sectors, addSector, deleteSector,
     devices, sims, models, brands, assetTypes, getHistory, settings 
   } = useData();
   const { user: currentUser } = useAuth();
@@ -25,6 +25,7 @@ const UserManager = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewOnly, setIsViewOnly] = useState(false); 
   const [isSectorModalOpen, setIsSectorModalOpen] = useState(false);
+  const [newSectorName, setNewSectorName] = useState('');
   const [activeTab, setActiveTab] = useState<'DATA' | 'ASSETS' | 'TERMS' | 'LOGS'>('DATA');
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -64,6 +65,13 @@ const UserManager = () => {
     if (editingId && formData.id) updateUser(formData as User, adminName);
     else addUser({ ...formData, id: Math.random().toString(36).substr(2, 9), terms: [] } as User, adminName);
     setIsModalOpen(false);
+  };
+
+  const handleAddSector = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!newSectorName.trim()) return;
+      await addSector({ id: Math.random().toString(36).substr(2, 9), name: newSectorName }, adminName);
+      setNewSectorName('');
   };
 
   const handleToggleClick = (user: User) => {
@@ -127,7 +135,7 @@ const UserManager = () => {
           <p className="text-gray-500 text-sm">Gestão de vínculos, termos e histórico de auditoria.</p>
         </div>
         <div className="flex gap-2">
-            <button onClick={() => setIsSectorModalOpen(true)} className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm hover:bg-gray-50"><Briefcase size={18} /> Cargos</button>
+            <button onClick={() => setIsSectorModalOpen(true)} className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm hover:bg-gray-50"><Briefcase size={18} /> Cargos / Setores</button>
             <button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm"><Plus size={18} /> Novo Usuário</button>
         </div>
       </div>
@@ -388,15 +396,47 @@ const UserManager = () => {
         </div>
       )}
 
-      {/* Modal de Gestão de Setores (Simplificado conforme original) */}
+      {/* Modal de Gestão de Setores (Restaurado com formulário de cadastro) */}
       {isSectorModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-                  <div className="bg-slate-900 p-4 text-white flex justify-between items-center"><h3 className="font-bold">Gerenciar Cargos</h3><button onClick={() => setIsSectorModalOpen(false)}><X size={20}/></button></div>
+          <div className="fixed inset-0 bg-black/60 bg-opacity-50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+                  <div className="bg-slate-900 p-5 text-white flex justify-between items-center">
+                      <h3 className="font-bold flex items-center gap-2"><Briefcase size={18}/> Gerenciar Cargos / Setores</h3>
+                      <button onClick={() => setIsSectorModalOpen(false)} className="text-slate-400 hover:text-white"><X size={20}/></button>
+                  </div>
                   <div className="p-6">
-                      <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
-                          {sectors.map(s => <div key={s.id} className="flex justify-between items-center p-2 bg-gray-50 rounded border"><span>{s.name}</span></div>)}
+                      <form onSubmit={handleAddSector} className="flex gap-2 mb-6">
+                          <input 
+                              required 
+                              type="text" 
+                              placeholder="Nome do novo cargo..." 
+                              className="flex-1 border rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                              value={newSectorName}
+                              onChange={(e) => setNewSectorName(e.target.value)}
+                          />
+                          <button type="submit" className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 shadow-md">
+                              <Save size={20}/>
+                          </button>
+                      </form>
+
+                      <div className="space-y-2 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                          {sectors.length > 0 ? sectors.map(s => (
+                              <div key={s.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-100 group hover:bg-white hover:shadow-sm transition-all">
+                                  <span className="text-sm font-bold text-slate-700">{s.name}</span>
+                                  <button 
+                                      onClick={() => { if(window.confirm(`Excluir o cargo "${s.name}"?`)) deleteSector(s.id, adminName); }}
+                                      className="text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-red-50 rounded-lg"
+                                  >
+                                      <Trash2 size={16}/>
+                                  </button>
+                              </div>
+                          )) : (
+                              <div className="text-center py-8 text-slate-400 italic text-sm">Nenhum cargo cadastrado.</div>
+                          )}
                       </div>
+                  </div>
+                  <div className="bg-slate-50 p-4 border-t text-center">
+                      <button onClick={() => setIsSectorModalOpen(false)} className="text-xs font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest">Fechar Janela</button>
                   </div>
               </div>
           </div>

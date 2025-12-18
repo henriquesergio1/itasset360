@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Device, User, SimCard, DeviceStatus, UserSector, DeviceModel, DeviceBrand, AssetType } from '../types';
-import { Download, Upload, FileText, CheckCircle, AlertTriangle, AlertCircle, Loader2, Database, ArrowRight, RefreshCcw, X, CheckSquare, ChevronRight, ChevronDown } from 'lucide-react';
+import { Download, Upload, FileText, CheckCircle, AlertTriangle, AlertCircle, Loader2, Database, ArrowRight, RefreshCw, X, CheckSquare, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 
 type ImportType = 'USERS' | 'DEVICES' | 'SIMS';
 
@@ -125,6 +125,7 @@ const DataImporter = () => {
       if (toProcess.length === 0) return;
       setStep('PROCESSING');
       setProgress({ current: 0, total: toProcess.length, created: 0, updated: 0, errors: 0 });
+      setLogs([]);
       
       const brandCache = new Map();
       const typeCache = new Map();
@@ -137,41 +138,37 @@ const DataImporter = () => {
               if (importType === 'DEVICES') {
                   const r = item.row;
                   
-                  // 1. Marca
                   const bName = (r['Marca'] || 'Genérica').trim();
                   let bId = brands.find(b => b.name.toLowerCase() === bName.toLowerCase())?.id || brandCache.get(bName.toLowerCase());
                   if (!bId) {
                       bId = Math.random().toString(36).substr(2, 9);
-                      addBrand({ id: bId, name: bName }, adminName);
+                      await addBrand({ id: bId, name: bName }, adminName);
                       brandCache.set(bName.toLowerCase(), bId);
                   }
 
-                  // 2. Tipo
                   const tName = (r['Tipo'] || 'Outros').trim();
                   let tId = assetTypes.find(t => t.name.toLowerCase() === tName.toLowerCase())?.id || typeCache.get(tName.toLowerCase());
                   if (!tId) {
                       tId = Math.random().toString(36).substr(2, 9);
-                      addAssetType({ id: tId, name: tName }, adminName);
+                      await addAssetType({ id: tId, name: tName }, adminName);
                       typeCache.set(tName.toLowerCase(), tId);
                   }
 
-                  // 3. Modelo
                   const mName = (r['Modelo'] || 'Genérico').trim();
                   let mId = models.find(m => m.name.toLowerCase() === mName.toLowerCase() && m.brandId === bId)?.id || modelCache.get(mName.toLowerCase() + bId);
                   if (!mId) {
                       mId = Math.random().toString(36).substr(2, 9);
-                      addModel({ id: mId, name: mName, brandId: bId, typeId: tId }, adminName);
+                      await addModel({ id: mId, name: mName, brandId: bId, typeId: tId }, adminName);
                       modelCache.set(mName.toLowerCase() + bId, mId);
                   }
 
-                  // 4. Setor do Ativo
                   const sName = (r['Setor Ativo'] || '').trim();
                   let sId = '';
                   if (sName) {
                       sId = sectors.find(s => s.name.toLowerCase() === sName.toLowerCase())?.id || sectorCache.get(sName.toLowerCase());
                       if (!sId) {
                           sId = Math.random().toString(36).substr(2, 9);
-                          addSector({ id: sId, name: sName }, adminName);
+                          await addSector({ id: sId, name: sName }, adminName);
                           sectorCache.set(sName.toLowerCase(), sId);
                       }
                   }
@@ -198,20 +195,24 @@ const DataImporter = () => {
                       customData: {}
                   };
 
-                  if (item.status === 'NEW') { addDevice(deviceData, adminName); setProgress(p => ({ ...p, created: p.created + 1 })); }
-                  else { updateDevice(deviceData, adminName); setProgress(p => ({ ...p, updated: p.updated + 1 })); }
+                  if (item.status === 'NEW') { 
+                      await addDevice(deviceData, adminName); 
+                      setProgress(p => ({ ...p, created: p.created + 1 })); 
+                  } else { 
+                      await updateDevice(deviceData, adminName); 
+                      setProgress(p => ({ ...p, updated: p.updated + 1 })); 
+                  }
 
               } else if (importType === 'USERS') {
                   const r = item.row;
 
-                  // Setor do Usuário
                   const uSectorName = (r['Setor'] || '').trim();
                   let uSectorId = '';
                   if (uSectorName) {
                       uSectorId = sectors.find(s => s.name.toLowerCase() === uSectorName.toLowerCase())?.id || sectorCache.get(uSectorName.toLowerCase());
                       if (!uSectorId) {
                           uSectorId = Math.random().toString(36).substr(2, 9);
-                          addSector({ id: uSectorId, name: uSectorName }, adminName);
+                          await addSector({ id: uSectorId, name: uSectorName }, adminName);
                           sectorCache.set(uSectorName.toLowerCase(), uSectorId);
                       }
                   }
@@ -222,20 +223,45 @@ const DataImporter = () => {
                       email: r['Email'],
                       cpf: r['CPF'],
                       pis: r['PIS'],
-                      jobTitle: r['Cargo/Funcao'] || '', // Fallback para compatibilidade se vier do CSV antigo
+                      jobTitle: '', 
                       sectorCode: r['Codigo de Setor'], 
                       rg: r['RG'],
                       address: r['Endereco'],
                       sectorId: uSectorId, 
                       active: true
                   };
-                  if (item.status === 'NEW') { addUser(userData, adminName); setProgress(p => ({ ...p, created: p.created + 1 })); }
-                  else { updateUser(userData, adminName); setProgress(p => ({ ...p, updated: p.updated + 1 })); }
+                  
+                  if (item.status === 'NEW') { 
+                      await addUser(userData, adminName); 
+                      setProgress(p => ({ ...p, created: p.created + 1 })); 
+                  } else { 
+                      await updateUser(userData, adminName); 
+                      setProgress(p => ({ ...p, updated: p.updated + 1 })); 
+                  }
+              } else if (importType === 'SIMS') {
+                  const r = item.row;
+                  const simData: SimCard = {
+                      id: item.status === 'NEW' ? Math.random().toString(36).substr(2, 9) : item.existingId!,
+                      phoneNumber: r['Numero'],
+                      operator: r['Operadora'],
+                      iccid: r['ICCID'],
+                      planDetails: r['Plano'],
+                      status: DeviceStatus.AVAILABLE,
+                      currentUserId: null
+                  };
+                  if (item.status === 'NEW') { 
+                      await addSim(simData, adminName); 
+                      setProgress(p => ({ ...p, created: p.created + 1 })); 
+                  } else { 
+                      await updateSim(simData, adminName); 
+                      setProgress(p => ({ ...p, updated: p.updated + 1 })); 
+                  }
               }
               setProgress(p => ({ ...p, current: i + 1 }));
           } catch (e: any) {
+              console.error(`Falha ao importar item ${i}:`, e);
               setProgress(p => ({ ...p, errors: p.errors + 1, current: i + 1 }));
-              setLogs(prev => [...prev, `Erro: ${e.message}`]);
+              setLogs(prev => [...prev, `Erro no item ${i + 1} (${importType === 'USERS' ? item.row['Email'] : item.row['Patrimonio']}): ${e.message}`]);
           }
       }
       setStep('DONE');
@@ -284,7 +310,7 @@ const DataImporter = () => {
                         <div className="bg-green-100 text-green-700 px-6 py-2 rounded-xl text-xs font-black uppercase shadow-sm border border-green-200">{analyzedData.filter(i => i.status === 'NEW').length} Novos</div>
                         <div className="bg-orange-100 text-orange-700 px-6 py-2 rounded-xl text-xs font-black uppercase shadow-sm border border-orange-200">{analyzedData.filter(i => i.status === 'CONFLICT').length} Atualizações</div>
                     </div>
-                    <button onClick={() => setStep('UPLOAD')} className="text-xs font-black text-slate-400 hover:text-slate-600 uppercase flex items-center gap-2 transition-colors"><RefreshCcw size={14}/> Trocar Arquivo</button>
+                    <button onClick={() => setStep('UPLOAD')} className="text-xs font-black text-slate-400 hover:text-slate-600 uppercase flex items-center gap-2 transition-colors"><RefreshCw size={14}/> Trocar Arquivo</button>
                 </div>
                 <div className="flex-1 overflow-y-auto border-2 border-slate-100 rounded-2xl shadow-inner bg-white">
                     <table className="w-full text-xs text-left">
@@ -299,7 +325,7 @@ const DataImporter = () => {
                             {analyzedData.map((item, idx) => (
                                 <tr key={idx} className="border-b hover:bg-blue-50/50 transition-colors">
                                     <td className="px-8 py-4 font-mono font-bold text-slate-700">
-                                        {importType === 'USERS' ? item.row['Email'] : item.row['Patrimonio']}
+                                        {importType === 'USERS' ? item.row['Email'] : item.row['Patrimonio'] || item.row['Numero']}
                                     </td>
                                     <td className="px-8 py-4">
                                         <span className={`px-4 py-1.5 rounded-lg font-black text-[10px] tracking-tighter shadow-sm border ${item.status === 'NEW' ? 'bg-green-50 text-green-600 border-green-200' : item.status === 'CONFLICT' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
@@ -340,17 +366,28 @@ const DataImporter = () => {
         )}
 
         {step === 'DONE' && (
-            <div className="flex flex-col items-center justify-center flex-1 space-y-10 animate-fade-in">
-                <div className="h-28 w-28 bg-green-100 text-green-600 rounded-full flex items-center justify-center shadow-2xl animate-bounce">
-                    <CheckCircle size={64} strokeWidth={2.5}/>
+            <div className="flex flex-col items-center justify-center flex-1 space-y-6 animate-fade-in overflow-y-auto">
+                <div className="h-24 w-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center shadow-2xl animate-bounce shrink-0">
+                    <CheckCircle size={48} strokeWidth={2.5}/>
                 </div>
-                <h3 className="text-4xl font-black text-slate-900 tracking-tighter">Sincronização Finalizada!</h3>
-                <div className="grid grid-cols-3 gap-8 text-center bg-white p-12 rounded-[2.5rem] border-2 border-slate-100 shadow-2xl w-full max-w-2xl">
-                    <div className="space-y-1"><p className="text-5xl font-black text-green-600">{progress.created}</p><p className="text-xs uppercase font-black text-slate-400 tracking-widest">Novos</p></div>
-                    <div className="space-y-1"><p className="text-5xl font-black text-blue-500">{progress.updated}</p><p className="text-xs uppercase font-black text-slate-400 tracking-widest">Atualizados</p></div>
-                    <div className="space-y-1"><p className="text-5xl font-black text-red-500">{progress.errors}</p><p className="text-xs uppercase font-black text-slate-400 tracking-widest">Falhas</p></div>
+                <h3 className="text-4xl font-black text-slate-900 tracking-tighter shrink-0">Sincronização Finalizada!</h3>
+                
+                <div className="grid grid-cols-3 gap-6 text-center bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-2xl w-full max-w-2xl shrink-0">
+                    <div className="space-y-1"><p className="text-4xl font-black text-green-600">{progress.created}</p><p className="text-[10px] uppercase font-black text-slate-400 tracking-widest">Novos</p></div>
+                    <div className="space-y-1"><p className="text-4xl font-black text-blue-500">{progress.updated}</p><p className="text-[10px] uppercase font-black text-slate-400 tracking-widest">Atualizados</p></div>
+                    <div className="space-y-1"><p className="text-4xl font-black text-red-500">{progress.errors}</p><p className="text-[10px] uppercase font-black text-slate-400 tracking-widest">Falhas</p></div>
                 </div>
-                <button onClick={() => setStep('UPLOAD')} className="bg-slate-900 text-white px-16 py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-black transition-all hover:scale-105">Nova Importação</button>
+
+                {logs.length > 0 && (
+                    <div className="w-full max-w-2xl bg-red-50 border border-red-100 rounded-xl p-4 max-h-40 overflow-y-auto">
+                        <h4 className="text-xs font-black text-red-600 uppercase mb-2">Relatório de Erros:</h4>
+                        <ul className="space-y-1">
+                            {logs.map((log, idx) => <li key={idx} className="text-[10px] text-red-800 font-mono leading-tight">{log}</li>)}
+                        </ul>
+                    </div>
+                )}
+
+                <button onClick={() => setStep('UPLOAD')} className="bg-slate-900 text-white px-16 py-4 rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-black transition-all hover:scale-105 shrink-0">Nova Importação</button>
             </div>
         )}
     </div>
