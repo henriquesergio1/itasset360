@@ -80,7 +80,8 @@ const UserManager = () => {
     const matchesStatus = viewMode === 'ACTIVE' ? u.active : !u.active;
     if (!matchesStatus) return false;
     if (filterSectorId && u.sectorId !== filterSectorId) return false;
-    return u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || u.cpf.includes(searchTerm);
+    const searchStr = `${u.fullName} ${u.cpf} ${u.internalCode || ''}`.toLowerCase();
+    return searchStr.includes(searchTerm.toLowerCase());
   });
 
   const userHistory = editingId ? getHistory(editingId) : [];
@@ -101,7 +102,7 @@ const UserManager = () => {
       <div className="flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-            <input type="text" placeholder="Nome ou CPF..." className="pl-10 w-full border rounded-lg py-2 outline-none focus:ring-2 focus:ring-emerald-500" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input type="text" placeholder="Nome, CPF ou Cód. Interno..." className="pl-10 w-full border rounded-lg py-2 outline-none focus:ring-2 focus:ring-emerald-500" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
         <div className="flex bg-gray-200 p-1 rounded-lg">
             <button onClick={() => setViewMode('ACTIVE')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'ACTIVE' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500'}`}>Ativos</button>
@@ -130,7 +131,10 @@ const UserManager = () => {
                 <tr key={user.id} className={`border-b hover:bg-gray-50 transition-colors ${!user.active ? 'opacity-60 bg-gray-50/50' : 'bg-white'}`}>
                   <td className="px-6 py-4">
                     <div onClick={() => handleOpenModal(user, true)} className="font-bold text-gray-900 cursor-pointer hover:text-emerald-600 hover:underline">{user.fullName}</div>
-                    <div className="text-[10px] text-gray-400 font-mono font-bold tracking-tighter uppercase">CPF: {user.cpf}</div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 font-mono font-bold tracking-tighter uppercase">CPF: {user.cpf}</span>
+                        {user.internalCode && <span className="text-[9px] bg-blue-50 text-blue-600 px-1 rounded font-black border border-blue-100 uppercase">Cód: {user.internalCode}</span>}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <div onClick={() => handleOpenModal(user, true)} className="flex items-center gap-2 cursor-pointer group">
@@ -231,8 +235,8 @@ const UserManager = () => {
                                 <input disabled={isViewOnly} className="w-full border rounded-lg p-2.5 text-sm font-mono" value={formData.pis || ''} onChange={e => setFormData({...formData, pis: e.target.value})}/>
                              </div>
                              <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Cód. Interno</label>
-                                <input disabled={isViewOnly} className="w-full border rounded-lg p-2.5 text-sm bg-yellow-50 font-bold" value={formData.jobTitle || ''} onChange={e => setFormData({...formData, jobTitle: e.target.value})}/>
+                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Código Interno</label>
+                                <input disabled={isViewOnly} className="w-full border rounded-lg p-2.5 text-sm bg-blue-50 font-bold" value={formData.internalCode || ''} onChange={e => setFormData({...formData, internalCode: e.target.value})} placeholder="Vendedor, Supervisor..."/>
                              </div>
                         </div>
                         <div className="md:col-span-2">

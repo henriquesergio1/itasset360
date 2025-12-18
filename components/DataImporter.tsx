@@ -55,8 +55,8 @@ const DataImporter = () => {
 
   const getTemplateHeaders = () => {
       switch(importType) {
-          case 'USERS': return 'Nome Completo;Email;CPF;PIS;Cargo/Funcao (Dropdown);Setor/Codigo (Texto);RG;Endereco';
-          case 'DEVICES': return 'Patrimonio;Serial;Modelo;Marca;Tipo;Status;Valor Pago;Data Compra;Fornecedor;IMEI;ID Pulsus;Setor Ativo;Centro de Custo';
+          case 'USERS': return 'Nome Completo;Email;CPF;PIS;Codigo Interno;Cargo/Funcao (Dropdown);Setor/Codigo (Texto);RG;Endereco';
+          case 'DEVICES': return 'Patrimonio;Serial;Codigo Interno;Modelo;Marca;Tipo;Status;Valor Pago;Data Compra;Fornecedor;IMEI;ID Pulsus;Setor Ativo;Centro de Custo';
           case 'SIMS': return 'Numero;Operadora;ICCID;Plano';
           default: return '';
       }
@@ -202,7 +202,8 @@ const DataImporter = () => {
                       modelId: mId,
                       assetTag: r['Patrimonio']?.trim() || r['IMEI']?.trim() || '',
                       serialNumber: (r['Serial']?.trim() || r['Patrimonio']?.trim() || r['IMEI']?.trim() || ''),
-                      status: mapStatus(r['Status']), // USANDO MAPPER INTELIGENTE
+                      internalCode: r['Codigo Interno']?.trim() || null,
+                      status: mapStatus(r['Status']),
                       purchaseCost: cleanCost,
                       purchaseDate: rawDate,
                       supplier: (r['Fornecedor'] || '').trim(),
@@ -231,6 +232,7 @@ const DataImporter = () => {
                        cpf: r['CPF']?.trim(),
                        pis: r['PIS']?.trim() || '',
                        jobTitle: r['Setor/Codigo (Texto)']?.trim() || '',
+                       internalCode: r['Codigo Interno']?.trim() || null,
                        sectorId: sId,
                        rg: r['RG']?.trim() || '',
                        address: r['Endereco']?.trim() || '',

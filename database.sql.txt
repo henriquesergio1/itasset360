@@ -1,6 +1,6 @@
 
 -- Script Completo de Criação de Tabelas - IT Asset 360
--- Versão 2.0 (Arquitetura de Campos Personalizados)
+-- Versão 2.2 (Código Interno Padronizado em Devices e Users)
 
 -- Configurações e Sistema
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SystemSettings')
@@ -78,6 +78,7 @@ CREATE TABLE Users (
     Email NVARCHAR(100) NOT NULL,
     SectorId NVARCHAR(50),
     JobTitle NVARCHAR(100),
+    InternalCode NVARCHAR(50), -- PADRONIZAÇÃO
     Active BIT DEFAULT 1,
     HasPendingIssues BIT DEFAULT 0, 
     PendingIssuesNote NVARCHAR(MAX), 
@@ -96,13 +97,14 @@ CREATE TABLE SimCards (
     CONSTRAINT FK_SimCards_Users FOREIGN KEY (CurrentUserId) REFERENCES Users(Id)
 );
 
--- Tabela de Dispositivos (Limpa de campos legados)
+-- Tabela de Dispositivos
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Devices')
 CREATE TABLE Devices (
     Id NVARCHAR(50) PRIMARY KEY,
     ModelId NVARCHAR(50), 
     SerialNumber NVARCHAR(50),
     AssetTag NVARCHAR(50),
+    InternalCode NVARCHAR(50), -- PADRONIZAÇÃO
     
     -- Identificadores Especiais (Mantidos por uso intensivo na UI)
     Imei NVARCHAR(50),

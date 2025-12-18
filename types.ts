@@ -69,13 +69,13 @@ export interface Device {
   assetTag: string; 
   status: DeviceStatus;
   currentUserId?: string | null;
+  internalCode?: string; // Campo Padronizado
   
   // Identificadores Fixos (Mantidos por terem lógica específica na UI)
   imei?: string;         
   pulsusId?: string;
   
   // Dados Personalizados (JSON flexível para RAM, IDs de Apps, etc)
-  // Substitui: Storage, Memory, FlexxGPSId, etc.
   customData?: Record<string, string>; 
 
   sectorId?: string;     
@@ -127,6 +127,7 @@ export interface User {
   email: string;
   sectorId: string; 
   jobTitle: string;
+  internalCode?: string; // Campo Padronizado
   active: boolean;
   terms?: Term[];
   hasPendingIssues?: boolean; 
