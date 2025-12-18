@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { User, UserSector, ActionType, Device, SimCard, Term } from '../types';
-import { Plus, Search, Edit2, Trash2, Mail, MapPin, Briefcase, Power, Settings, X, Smartphone, FileText, History, ExternalLink, AlertTriangle, Printer, Link as LinkIcon, User as UserIcon, Upload, CheckCircle, Filter, Users, Archive, Tag, ChevronRight, Cpu, Hash, CreditCard, Fingerprint } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Mail, MapPin, Briefcase, Power, Settings, X, Smartphone, FileText, History, ExternalLink, AlertTriangle, Printer, Link as LinkIcon, User as UserIcon, Upload, CheckCircle, Filter, Users, Archive, Tag, ChevronRight, Cpu, Hash, CreditCard, Fingerprint, RefreshCw } from 'lucide-react';
 import { generateAndPrintTerm } from '../utils/termGenerator';
 
 const UserManager = () => {
@@ -74,6 +74,40 @@ const UserManager = () => {
       const assignedDevices = devices.filter(d => d.currentUserId === user.id);
       if (assignedDevices.length > 0) return alert('Devolva os ativos antes de inativar.');
       toggleUserActive(user, adminName, 'Inativação Manual');
+  };
+
+  // --- FUNÇÃO DE REIMPRESSÃO ---
+  const handleReprint = (term: Term) => {
+      const user = users.find(u => u.id === term.userId);
+      if (!user) return;
+
+      const asset = devices.find(d => term.assetDetails.includes(d.assetTag)) || 
+                    sims.find(s => term.assetDetails.includes(s.phoneNumber));
+
+      if (!asset) {
+          alert("Atenção: O ativo original deste termo não foi localizado no banco (pode ter sido excluído). A impressão será gerada com os dados de texto salvos.");
+      }
+
+      let model, brand, type, linkedSim;
+      if (asset && 'modelId' in asset) {
+          model = models.find(m => m.id === asset.modelId);
+          brand = brands.find(b => b.id === model?.brandId);
+          type = assetTypes.find(t => t.id === model?.typeId);
+          if (asset.linkedSimId) linkedSim = sims.find(s => s.id === asset.linkedSimId);
+      }
+
+      generateAndPrintTerm({
+          user,
+          asset: asset || ({ id: 'old', assetTag: 'HISTÓRICO', serialNumber: 'N/A' } as any),
+          settings,
+          model,
+          brand,
+          type,
+          linkedSim,
+          actionType: term.type,
+          sectorName: sectors.find(s => s.id === user.sectorId)?.name,
+          notes: `Reimpressão de termo original de ${new Date(term.date).toLocaleDateString()}`
+      });
   };
 
   const filteredUsers = users.filter(u => {
@@ -231,9 +265,13 @@ const UserManager = () => {
                                 <input disabled={isViewOnly} className="w-full border rounded-lg p-2.5 text-sm font-mono" value={formData.pis || ''} onChange={e => setFormData({...formData, pis: e.target.value})}/>
                              </div>
                              <div>
-                                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Cód. Interno</label>
-                                <input disabled={isViewOnly} className="w-full border rounded-lg p-2.5 text-sm bg-yellow-50 font-bold" value={formData.jobTitle || ''} onChange={e => setFormData({...formData, jobTitle: e.target.value})}/>
+                                <label className="block text-[10px] font-black uppercase text-blue-600 mb-1">Código de Setor</label>
+                                <input disabled={isViewOnly} className="w-full border-2 border-blue-100 rounded-lg p-2.5 text-sm bg-blue-50 font-bold" placeholder="Opcional" value={formData.sectorCode || ''} onChange={e => setFormData({...formData, sectorCode: e.target.value})}/>
                              </div>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Cód. Interno / Cargo Detalhado</label>
+                            <input disabled={isViewOnly} className="w-full border rounded-lg p-2.5 text-sm" value={formData.jobTitle || ''} onChange={e => setFormData({...formData, jobTitle: e.target.value})}/>
                         </div>
                         <div className="md:col-span-2">
                             <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Endereço Completo</label>
@@ -284,7 +322,8 @@ const UserManager = () => {
                                     <div className={`absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-white shadow-sm
                                         ${log.action === ActionType.CHECKOUT ? 'bg-blue-500' :
                                           log.action === ActionType.CHECKIN ? 'bg-orange-500' :
-                                          log.action === ActionType.INACTIVATE ? 'bg-red-500' : 'bg-emerald-500'}`}>
+                                          log.action === ActionType.INACTIVATE ? 'bg-red-500' :
+                                          log.action === ActionType.ACTIVATE ? 'bg-emerald-500' : 'bg-blue-500'}`}>
                                     </div>
                                     <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
                                         {new Date(log.timestamp).toLocaleString('pt-BR')}
@@ -293,7 +332,7 @@ const UserManager = () => {
                                         {log.action}
                                     </div>
                                     <div className="text-xs text-slate-600 leading-relaxed max-w-2xl">{log.notes}</div>
-                                    <div className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest">Realizado por: {log.adminUser}</div>
+                                    <div className="text-[9px] font-black text-gray-400 uppercase mt-1 tracking-widest">Realizado por: {log.adminUser}</div>
                                 </div>
                             )) : (
                                 <div className="text-center py-16 text-slate-400 italic text-sm font-medium">Nenhum registro de movimentação encontrado para este colaborador.</div>
@@ -318,15 +357,26 @@ const UserManager = () => {
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => handleReprint(term)} 
+                                            className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors border border-blue-100 shadow-sm"
+                                            title="Reimprimir Termo"
+                                        >
+                                            <Printer size={16}/>
+                                        </button>
+
                                         {term.fileUrl ? (
-                                            <a href={term.fileUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors"><ExternalLink size={16}/></a>
+                                            <a href={term.fileUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors border border-emerald-100 shadow-sm" title="Ver Arquivo Anexado"><ExternalLink size={16}/></a>
                                         ) : (
-                                            <span className="text-[10px] font-black text-red-500 bg-red-50 px-2 py-1 rounded border border-red-100">PENDENTE ARQUIVO</span>
+                                            <span className="text-[10px] font-black text-red-500 bg-red-50 px-3 py-2 rounded border border-red-100 flex items-center uppercase tracking-tighter">PENDENTE ANEXO</span>
                                         )}
                                     </div>
                                 </div>
                             ))}
                          </div>
+                         {(users.find(u => u.id === editingId)?.terms || []).length === 0 && (
+                             <div className="text-center py-10 text-slate-400 italic text-sm">Nenhum termo gerado para este usuário.</div>
+                         )}
                     </div>
                 )}
             </div>

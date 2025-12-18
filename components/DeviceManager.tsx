@@ -32,6 +32,7 @@ const DeviceManager = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'FINANCIAL' | 'MAINTENANCE' | 'HISTORY'>('GENERAL');
   const [isUploadingInvoice, setIsUploadingInvoice] = useState(false);
+  const [isUploadingMaintInvoice, setIsUploadingMaintInvoice] = useState(false);
   
   // Quick View User
   const [viewingUser, setViewingUser] = useState<User | null>(null);
@@ -100,10 +101,23 @@ const DeviceManager = () => {
       }
   };
 
+  const handleMaintInvoiceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        setIsUploadingMaintInvoice(true);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setNewMaint({ ...newMaint, invoiceUrl: reader.result as string });
+            setIsUploadingMaintInvoice(false);
+        };
+        reader.readAsDataURL(file);
+    }
+  };
+
   const filteredDevices = devices.filter(d => {
     if (viewStatus !== 'ALL' && d.status !== viewStatus) return false;
     const { model, brand } = getModelDetails(d.modelId);
-    const searchString = `${model?.name} ${brand?.name} ${d.assetTag} ${d.imei || ''} ${d.pulsusId || ''}`.toLowerCase();
+    const searchString = `${model?.name} ${brand?.name} ${d.assetTag} ${d.imei || ''} ${d.pulsusId || ''} ${d.sectorCode || ''}`.toLowerCase();
     return searchString.includes(searchTerm.toLowerCase());
   });
 
@@ -143,7 +157,7 @@ const DeviceManager = () => {
   const handleOpenReturn = (device: Device) => {
       setSelectedOpAsset(device);
       setOpNotes('');
-      setOpChecklist({ device: true, charger: true, cable: true, case: true, sim: !!device.linkedSimId });
+      setOpChecklist({ device: true, charger: true, cable: true, case: true });
       setIsSuccessState(false);
       setIsReturnModalOpen(true);
   };
@@ -197,7 +211,7 @@ const DeviceManager = () => {
 
       <div className="relative">
         <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-        <input type="text" placeholder="Tag, modelo, serial ou pulsus..." className="pl-10 w-full border rounded-lg py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+        <input type="text" placeholder="Tag, modelo, serial, pulsus ou código de setor..." className="pl-10 w-full border rounded-lg py-2 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -234,6 +248,7 @@ const DeviceManager = () => {
                   <td className="px-6 py-4 font-mono text-xs">
                     <div className="font-bold">{d.assetTag}</div>
                     {d.serialNumber && <div className="text-[10px] text-gray-400 font-mono">SN: {d.serialNumber}</div>}
+                    {d.sectorCode && <div className="text-[9px] text-blue-600 font-black uppercase mt-0.5">SETOR: {d.sectorCode}</div>}
                   </td>
                   <td className="px-6 py-4 text-xs">
                     <div className="font-bold text-slate-700">{sec?.name || '-'}</div>
@@ -316,6 +331,11 @@ const DeviceManager = () => {
                      ))}
                      <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Número de Série (SN)</label><input required disabled={isViewOnly} className="w-full border rounded-lg p-2.5 text-sm font-mono" value={formData.serialNumber || ''} onChange={e => setFormData({...formData, serialNumber: e.target.value})}/></div>
                      <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-1">ID MDM Pulsus</label><input disabled={isViewOnly} className="w-full border rounded-lg p-2.5 text-sm" value={formData.pulsusId || ''} onChange={e => setFormData({...formData, pulsusId: e.target.value})}/></div>
+                     
+                     <div className="col-span-2">
+                        <label className="block text-[10px] font-black uppercase text-blue-600 mb-1">Código de Setor</label>
+                        <input disabled={isViewOnly} className="w-full border-2 border-blue-100 rounded-lg p-2.5 text-sm font-bold bg-blue-50/30" placeholder="Ex: VEND-001 (Opcional)" value={formData.sectorCode || ''} onChange={e => setFormData({...formData, sectorCode: e.target.value})}/>
+                     </div>
                   </form>
                 )}
 
@@ -366,15 +386,36 @@ const DeviceManager = () => {
                                 <div className="grid grid-cols-2 gap-2">
                                     <input placeholder="Descrição do reparo..." className="col-span-2 border rounded p-2.5 text-sm shadow-inner" value={newMaint.description || ''} onChange={e => setNewMaint({...newMaint, description: e.target.value})}/>
                                     <input type="number" placeholder="Custo (R$)" className="border rounded p-2.5 text-sm shadow-inner" value={newMaint.cost || ''} onChange={e => setNewMaint({...newMaint, cost: Number(e.target.value)})}/>
-                                    <button onClick={() => { if(newMaint.description && newMaint.cost) { addMaintenance({...newMaint, id: Math.random().toString(36).substr(2,9), deviceId: editingId!, date: new Date().toISOString(), type: MaintenanceType.CORRECTIVE, provider: 'Interno'} as MaintenanceRecord, adminName); setNewMaint({cost: 0, description: ''}); } }} className="bg-orange-600 text-white rounded font-bold text-xs uppercase tracking-widest hover:bg-orange-700 transition-colors">Salvar Registro</button>
+                                    
+                                    {/* Upload de Nota de Serviço Restaurado */}
+                                    <div className="col-span-2">
+                                        {newMaint.invoiceUrl ? (
+                                            <div className="flex items-center justify-between p-2 bg-white border rounded text-xs">
+                                                <span className="text-emerald-600 font-bold flex items-center gap-1"><Check size={14}/> Nota de Serviço Anexada</span>
+                                                <button onClick={() => setNewMaint({...newMaint, invoiceUrl: ''})} className="text-red-500 hover:underline">Remover</button>
+                                            </div>
+                                        ) : (
+                                            <label className="flex items-center justify-center gap-2 p-2 border-2 border-dashed border-orange-200 rounded bg-white/50 cursor-pointer hover:bg-white transition-colors">
+                                                {isUploadingMaintInvoice ? <RefreshCw size={14} className="animate-spin text-orange-500"/> : <Paperclip size={14} className="text-orange-400"/>}
+                                                <span className="text-[10px] font-black text-orange-600 uppercase">{isUploadingMaintInvoice ? 'Enviando...' : 'Anexar Nota de Serviço'}</span>
+                                                <input type="file" className="hidden" accept="application/pdf,image/*" onChange={handleMaintInvoiceUpload} />
+                                            </label>
+                                        )}
+                                    </div>
+
+                                    <button onClick={() => { if(newMaint.description && newMaint.cost) { addMaintenance({...newMaint, id: Math.random().toString(36).substr(2,9), deviceId: editingId!, date: new Date().toISOString(), type: MaintenanceType.CORRECTIVE, provider: 'Interno'} as MaintenanceRecord, adminName); setNewMaint({cost: 0, description: '', invoiceUrl: ''}); } }} className="col-span-2 py-2 bg-orange-600 text-white rounded font-bold text-xs uppercase tracking-widest hover:bg-orange-700 transition-colors">Salvar Registro</button>
                                 </div>
                              </div>
                         )}
                         <div className="space-y-2">
                             {deviceMaintenances.map(m => (
                                 <div key={m.id} className="flex justify-between items-center p-3 bg-white border rounded-lg shadow-sm border-l-4 border-l-orange-400">
-                                    <div><p className="font-bold text-sm text-gray-800">{m.description}</p><p className="text-[10px] text-gray-400 font-bold uppercase">{new Date(m.date).toLocaleDateString()} • {m.provider}</p></div>
-                                    <div className="text-right">
+                                    <div className="flex-1">
+                                        <p className="font-bold text-sm text-gray-800">{m.description}</p>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase">{new Date(m.date).toLocaleDateString()} • {m.provider}</p>
+                                        {m.invoiceUrl && <a href={m.invoiceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[9px] font-black text-blue-600 uppercase mt-1 hover:underline"><FileText size={10}/> Ver Nota de Serviço</a>}
+                                    </div>
+                                    <div className="text-right ml-4">
                                         <p className="font-black text-sm text-red-600">R$ {m.cost.toFixed(2)}</p>
                                         {!isViewOnly && <button onClick={() => deleteMaintenance(m.id, adminName)} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>}
                                     </div>
@@ -447,9 +488,15 @@ const DeviceManager = () => {
                               </div>
                           </div>
 
-                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center gap-4">
-                              <Hash size={18} className="text-slate-400"/>
-                              <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Número PIS</p><p className="text-sm font-bold text-slate-700">{viewingUser.pis || 'Não informado'}</p></div>
+                          <div className="grid grid-cols-2 gap-3">
+                              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center gap-4">
+                                  <Hash size={18} className="text-slate-400"/>
+                                  <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Número PIS</p><p className="text-sm font-bold text-slate-700">{viewingUser.pis || 'Não informado'}</p></div>
+                              </div>
+                              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center gap-4">
+                                  <MapPin size={18} className="text-blue-400"/>
+                                  <div><p className="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Cód. Setor</p><p className="text-sm font-bold text-blue-700">{viewingUser.sectorCode || 'N/A'}</p></div>
+                              </div>
                           </div>
 
                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center gap-4">

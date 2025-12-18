@@ -70,12 +70,12 @@ export interface Device {
   status: DeviceStatus;
   currentUserId?: string | null;
   
-  // Identificadores Fixos (Mantidos por terem lógica específica na UI)
+  // Identificadores Fixos
   imei?: string;         
   pulsusId?: string;
+  sectorCode?: string; // Alterado de internalCode para sectorCode
   
-  // Dados Personalizados (JSON flexível para RAM, IDs de Apps, etc)
-  // Substitui: Storage, Memory, FlexxGPSId, etc.
+  // Dados Personalizados
   customData?: Record<string, string>; 
 
   sectorId?: string;     
@@ -127,6 +127,7 @@ export interface User {
   email: string;
   sectorId: string; 
   jobTitle: string;
+  sectorCode?: string; // Adicionado código de setor para colaboradores
   active: boolean;
   terms?: Term[];
   hasPendingIssues?: boolean; 
